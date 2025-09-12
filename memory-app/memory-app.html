@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>記憶小本本</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2b7cff">
+<style>
+  :root{--bg:#fff;--fg:#111;--muted:#666;--accent:#2b7cff;--line:#eee}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial}
+  header{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--line);padding:12px;z-index:2}
+  header h1{margin:0;font-size:20px}
+  .bar{display:flex;gap:8px;margin-top:8px}
+  input[type="search"]{flex:1;padding:10px;border:1px solid var(--line);border-radius:10px}
+  .btn{padding:10px 14px;border:1px solid var(--line);background:#f9f9f9;border-radius:10px}
+  .btn.accent{background:var(--accent);border-color:var(--accent);color:#fff}
+  main{padding:12px}
+  form#addForm{display:grid;gap:8px;background:#fafafa;border:1px solid var(--line);padding:12px;border-radius:12px}
+  .row{display:flex;gap:8px}
+  .row > *{flex:1}
+  .hint{font-size:12px;color:var(--muted)}
+  .list{margin-top:12px;display:grid;gap:10px}
+  .card{display:grid;grid-template-columns:64px 1fr auto;gap:10px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff}
+  .thumb{width:64px;height:64px;border-radius:8px;object-fit:cover;background:#f0f0f0;border:1px solid var(--line)}
+  .title{font-weight:600;margin:0 0 4px}
+  .note{margin:0;color:var(--muted);font-size:13px}
+  .actions{display:flex;gap:6px;align-items:center}
+  .iconbtn{border:1px solid var(--line);background:#f8f8f8;border-radius:8px;padding:8px}
+  label.chk{display:flex;align-items:center;gap:8px}
+  .empty{color:var(--muted);text-align:center;margin:24px 0}
+  footer{padding:16px;text-align:center;color:var(--muted);font-size:12px}
+  /* 常買區 */
+  .staples{margin-top:12px;border:1px dashed var(--line);border-radius:12px;padding:10px;background:#fff}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{display:flex;align-items:center;gap:6px;border:1px solid var(--line);padding:8px 10px;border-radius:999px}
+  .chip b{font-weight:600}
+  .chip .plus{border:0;background:transparent;font-weight:700;cursor:pointer}
+  .staples-bar{display:flex;gap:8px;margin-top:8px}
+  @media (min-width:700px){ main{max-width:760px;margin:0 auto} }
+</style>
+</head>
+<body>
+<header>
+  <h1>📝 記憶小本本</h1>
+  <div class="bar">
+    <input id="search" type="search" placeholder="搜尋項目或備註…">
+    <button id="exportBtn" class="btn">匯出</button>
+    <button id="importBtn" class="btn">匯入</button>
+    <button id="installBtn" class="btn" style="display:none;">安裝</button>
+  </div>
+</header>
+
+<main>
+  <form id="addForm">
+    <div class="row">
+      <input id="title" type="text" placeholder="要買什麼？（例如：牛奶）" required>
+      <input id="note" type="text" placeholder="備註（品牌、規格…）">
+    </div>
+    <div class="row">
+      <input id="photo" type="file" accept="image/*" capture="environment">
+      <button class="btn accent" type="submit">新增</button>
+    </div>
+    <div class="row" style="align-items:center;">
+      <label style="display:flex;align-items:center;gap:8px;">
+        <input id="saveAsStaple" type="checkbox"> 同時存到常買清單
+      </label>
+    </div>
+    <div class="hint">可直接打字儲存；若要拍照，點「選擇檔案」。照片會自動壓縮，節省空間。</div>
+  </form>
+
+  <!-- 常買清單 -->
+  <section class="staples">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+      <strong>📌 常買清單</strong>
+      <div class="staples-bar">
+        <button id="addAllStaplesBtn" class="btn">一鍵全加入</button>
+        <button id="manageStaplesBtn" class="btn">管理</button>
+      </div>
+    </div>
+    <div id="stapleChips" class="chips"></div>
+    <div class="hint" style="margin-top:6px;">點 + 可把該項目加入今天的清單。</div>
+  </section>
+
+  <section class="list" id="list"></section>
+  <div class="empty" id="empty" style="display:none;">目前沒有項目，先上面新增一個吧！</div>
+</main>
+
+<footer>資料儲存在本機（離線可用）。安裝後更像原生 App。</footer>
+
+<script>
+/** ====== 本地資料層（localStorage）====== **/
+const KEY = 'memory_app_items_v1'; // [{id, title, note, imgData, checked, createdAt}]
+const KEY_STAPLES = 'memory_app_staples_v1'; // [{id, title, note}]
+let items = load(KEY, []);
+let staples = load(KEY_STAPLES, [
+  // 預設常買可改
+  {id: crypto.randomUUID(), title:'牛奶', note:'全脂 2L'},
+  {id: crypto.randomUUID(), title:'雞蛋', note:'10入'},
+  {id: crypto.randomUUID(), title:'衛生紙', note:'抽取式'}
+]);
+
+function load(k, fallback){ try{ return JSON.parse(localStorage.getItem(k)) || fallback }catch{ return fallback } }
+function save(){ localStorage.setItem(KEY, JSON.stringify(items)); localStorage.setItem(KEY_STAPLES, JSON.stringify(staples)); }
+
+/** ====== 工具：壓縮圖片到 base64（長邊 800px）====== **/
+async function fileToDataURL(file, max=800, quality=0.72){
+  if(!file) return null;
+  const img = new Image();
+  const reader = new FileReader();
+  const data = await new Promise((res,rej)=>{
+    reader.onload = () => res(reader.result);
+    reader.onerror = rej;
+    reader.readAsDataURL(file);
+  });
+  return await new Promise((res)=>{
+    img.onload = ()=>{
+      const w = img.width, h = img.height;
+      let nw = w, nh = h;
+      if (Math.max(w,h) > max){
+        if (w >= h){ nw = max; nh = Math.round(h * (max/w)); }
+        else { nh = max; nw = Math.round(w * (max/h)); }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = nw; canvas.height = nh;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, nw, nh);
+      res(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.src = data;
+  });
+}
+
+/** ====== DOM ====== **/
+const $ = (q)=>document.querySelector(q);
+const listEl = $('#list');
+const emptyEl = $('#empty');
+const searchEl = $('#search');
+const stapleChipsEl = $('#stapleChips');
+
+function renderStaples(){
+  stapleChipsEl.innerHTML = '';
+  if(staples.length===0){
+    stapleChipsEl.innerHTML = '<span class="hint">目前沒有常買項目，勾選「同時存到常買清單」即可新增。</span>';
+    return;
+  }
+  staples.forEach(st=>{
+    const chip = document.createElement('div');
+    chip.className='chip';
+    const b = document.createElement('b'); b.textContent = st.title;
+    const small = document.createElement('span'); small.style.color='var(--muted)'; small.textContent = st.note? ` · ${st.note}` : '';
+    const plus = document.createElement('button'); plus.className='plus'; plus.title='加入清單'; plus.textContent='+';
+    plus.addEventListener('click', ()=>{
+      items.unshift({ id: crypto.randomUUID(), title: st.title, note: st.note||'', imgData:null, checked:false, createdAt: Date.now() });
+      save(); render();
+    });
+    chip.appendChild(b); chip.appendChild(small); chip.appendChild(plus);
+    stapleChipsEl.appendChild(chip);
+  });
+}
+
+function render(){
+  renderStaples();
+  listEl.innerHTML = '';
+  const q = (searchEl.value || '').trim().toLowerCase();
+  const filtered = items.filter(it=>{
+    if(!q) return true;
+    return (it.title||'').toLowerCase().includes(q) || (it.note||'').toLowerCase().includes(q);
+  });
+
+  emptyEl.style.display = filtered.length===0 ? 'block' : 'none';
+
+  filtered
+    .sort((a,b)=>Number(a.checked)-Number(b.checked) || b.createdAt - a.createdAt)
+    .forEach(it=>{
+      const card = document.createElement('div');
+      card.className='card';
+
+      const img = document.createElement('img');
+      img.className='thumb'; img.alt = it.title || '';
+      img.src = it.imgData || '';
+      card.appendChild(img);
+
+      const text = document.createElement('div');
+      const title = document.createElement('p'); title.className='title'; title.textContent = it.title || '(未命名)';
+      const note = document.createElement('p'); note.className='note'; note.textContent = it.note || '';
+      text.appendChild(title); text.appendChild(note);
+      card.appendChild(text);
+
+      const actions = document.createElement('div'); actions.className='actions';
+
+      const lbl = document.createElement('label'); lbl.className='chk';
+      const chk = document.createElement('input'); chk.type='checkbox'; chk.checked = !!it.checked;
+      chk.addEventListener('change',()=>{ it.checked = chk.checked; save(); render(); });
+      const span = document.createElement('span'); span.textContent='已買';
+      lbl.appendChild(chk); lbl.appendChild(span);
+
+      const favBtn = document.createElement('button'); // 設為常買
+      favBtn.className='iconbtn'; favBtn.textContent='設為常買';
+      favBtn.addEventListener('click', ()=>{
+        if(!staples.some(s=>s.title===it.title && (s.note||'')===(it.note||''))){
+          staples.unshift({id: crypto.randomUUID(), title: it.title, note: it.note||''});
+          save(); renderStaples();
+          alert('已加入常買清單');
+        }else{
+          alert('常買清單已存在相同項目');
+        }
+      });
+
+      const editBtn = document.createElement('button'); editBtn.className='iconbtn'; editBtn.title='編輯'; editBtn.textContent='編輯';
+      editBtn.addEventListener('click', async ()=>{
+        const newTitle = prompt('品項名稱', it.title || ''); if(newTitle===null) return;
+        const newNote = prompt('備註', it.note || ''); it.title = newTitle.trim(); it.note = (newNote||'').trim(); save(); render();
+      });
+
+      const imgBtn = document.createElement('button'); imgBtn.className='iconbtn'; imgBtn.title='更換照片'; imgBtn.textContent='照片';
+      imgBtn.addEventListener('click', async ()=>{
+        const input = document.createElement('input');
+        input.type='file'; input.accept='image/*'; input.capture='environment';
+        input.onchange = async ()=>{
+          const file = input.files?.[0];
+          it.imgData = file ? await fileToDataURL(file) : it.imgData;
+          save(); render();
+        };
+        input.click();
+      });
+
+      const delBtn = document.createElement('button'); delBtn.className='iconbtn'; delBtn.title='刪除'; delBtn.textContent='刪除';
+      delBtn.addEventListener('click',()=>{
+        if(confirm('確定刪除這個項目？')){
+          items = items.filter(x=>x.id!==it.id);
+          save(); render();
+        }
+      });
+
+      actions.appendChild(lbl);
+      actions.appendChild(favBtn);
+      actions.appendChild(editBtn);
+      actions.appendChild(imgBtn);
+      actions.appendChild(delBtn);
+      card.appendChild(actions);
+
+      if(it.checked){ card.style.opacity=0.6; title.style.textDecoration='line-through'; }
+
+      listEl.appendChild(card);
+    });
+}
+
+$('#addForm').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const title = $('#title').value.trim();
+  const note  = $('#note').value.trim();
+  const file  = $('#photo').files[0];
+  if(!title && !file){ alert('至少輸入名稱或選一張照片唷！'); return; }
+  const imgData = file ? await fileToDataURL(file) : null;
+  const it = { id: crypto.randomUUID(), title, note, imgData, checked:false, createdAt: Date.now() };
+  items.unshift(it);
+
+  if($('#saveAsStaple').checked && title){
+    if(!staples.some(s=>s.title===title && (s.note||'')===(note||''))){
+      staples.unshift({id: crypto.randomUUID(), title, note});
+    }
+  }
+
+  save();
+  $('#title').value=''; $('#note').value=''; $('#photo').value=''; $('#saveAsStaple').checked=false;
+  render();
+});
+
+$('#addAllStaplesBtn').addEventListener('click', ()=>{
+  if(staples.length===0){ alert('目前沒有常買項目'); return; }
+  staples.forEach(st=>{
+    items.unshift({ id: crypto.randomUUID(), title: st.title, note: st.note||'', imgData:null, checked:false, createdAt: Date.now() });
+  });
+  save(); render(); alert('已將常買項目加入清單');
+});
+
+$('#manageStaplesBtn').addEventListener('click', ()=>{
+  if(staples.length===0){ alert('目前沒有常買項目'); return; }
+  const names = staples.map((s,i)=>`${i+1}. ${s.title}${s.note?`（${s.note}）`:''}`).join('\n');
+  const idxStr = prompt(`輸入要刪除的序號（逗號可多選，例如：1,3）\n\n${names}\n\n取消 = 不操作`);
+  if(idxStr===null || !idxStr.trim()) return;
+  const indices = idxStr.split(',').map(s=>parseInt(s.trim(),10)-1).filter(n=>!isNaN(n));
+  staples = staples.filter((_,i)=>!indices.includes(i));
+  save(); renderStaples();
+});
+
+searchEl.addEventListener('input', render);
+
+/** 匯出 / 匯入（JSON） **/
+$('#exportBtn').addEventListener('click', ()=>{
+  const payload = { items, staples };
+  const blob = new Blob([JSON.stringify(payload)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'memory-data.json';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+$('#importBtn').addEventListener('click', ()=>{
+  const input = document.createElement('input');
+  input.type='file'; input.accept='application/json';
+  input.onchange = async ()=>{
+    const file = input.files?.[0]; if(!file) return;
+    const text = await file.text();
+    try{
+      const data = JSON.parse(text);
+      if(data && (Array.isArray(data.items) || Array.isArray(data.staples))){
+        if(Array.isArray(data.items)) items = data.items;
+        if(Array.isArray(data.staples)) staples = data.staples;
+        save(); render();
+      }else{ alert('格式不正確'); }
+    }catch{ alert('無法解析檔案'); }
+  };
+  input.click();
+});
+
+// 初次渲染
+render();
+window.addEventListener('pageshow', ()=>render());
+
+/** ====== PWA 安裝流程 ====== **/
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e)=>{
+  e.preventDefault(); deferredPrompt = e;
+  const btn = document.getElementById('installBtn');
+  btn.style.display='inline-block';
+  btn.onclick = async ()=>{
+    btn.style.display='none';
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    deferredPrompt = null;
+  };
+});
+
+// 註冊 Service Worker
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{ navigator.serviceWorker.register('./sw.js'); });
+}
+</script>
+</body>
+</html>
