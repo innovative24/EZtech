@@ -289,14 +289,38 @@ $('#manageStaplesBtn').addEventListener('click', ()=>{
 searchEl.addEventListener('input', render);
 
 /** 匯出 / 匯入（JSON） **/
+// 取代原本的 export 監聽器
 $('#exportBtn').addEventListener('click', ()=>{
-  const payload = { items, staples };
-  const blob = new Blob([JSON.stringify(payload)], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'memory-data.json';
-  a.click();
-  URL.revokeObjectURL(url);
+  try{
+    const payload = { items, staples };
+    const text = JSON.stringify(payload, null, 2);
+
+    // 重點：用 TextEncoder 轉成 UTF-8 bytes，並明確宣告 charset
+    const bytes = new TextEncoder().encode(text);
+    const blob  = new Blob([bytes], { type: 'application/json;charset=utf-8' });
+    const url   = URL.createObjectURL(blob);
+
+    // 先嘗試下載
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'memory-data.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    // 下載被忽略時（PWA/Safari 偶發），備援：用 data: URL 另開正確編碼的新分頁
+    setTimeout(()=>{
+      // 明確帶上 charset，避免亂碼
+      const dataUrl = 'data:application/json;charset=utf-8,' + encodeURIComponent(text);
+      window.open(dataUrl, '_blank');
+      URL.revokeObjectURL(url);
+    }, 400);
+  }catch(e){
+    // 最保險的備援：用可複製的文字框
+    const payload = { items, staples };
+    const text = JSON.stringify(payload, null, 2);
+    prompt('複製以下文字貼到記事本保存：', text);
+  }
 });
 
 $('#importBtn').addEventListener('click', ()=>{
