@@ -35,47 +35,103 @@
     <!-- 2) 新增：Dashboard View -->
 <div id="dashboardView" class="view">
   <section class="card">
-    <!-- 計分區：左中右 -->
-    <div class="grid" style="grid-template-columns:1fr 1.2fr 1fr;">
-      <!-- 左：主隊 -->
-      <div class="card" style="padding:14px;">
-        <div class="label">主隊</div>
-        <div id="dashHomeName" class="score small">HOME</div>
-        <div id="dashHomeScore" class="score">0</div>
-      </div>
+    <!-- 計分區：左中右（含操作） -->
+<div class="grid" style="grid-template-columns:1fr 1.2fr 1fr;">
+  <!-- 左：主隊 -->
+  <div class="card" style="padding:14px;">
+    <div class="label">主隊</div>
+    <div id="dashHomeName" class="score small">HOME</div>
+    <div id="dashHomeScore" class="score">0</div>
 
-      <!-- 中：比賽名稱 / 節次 -->
-      <div class="card" style="padding:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;">
-        <div id="dashGameTitle" class="score small" style="text-align:center;">比賽名稱</div>
-        <div id="dashPeriod" class="label" style="margin-top:8px;font-size:16px;">第1節</div>
-      </div>
-
-      <!-- 右：客隊 -->
-      <div class="card" style="padding:14px;text-align:right;">
-        <div class="label">客隊</div>
-        <div id="dashAwayName" class="score small">AWAY</div>
-        <div id="dashAwayScore" class="score">0</div>
-      </div>
+    <div class="row center mt8">
+      <button id="dashHomeAdd1">+1</button>
+      <button id="dashHomeAdd2">+2</button>
+      <button id="dashHomeAdd3">+3</button>
+      <button id="dashHomeSub1">-1</button>
     </div>
 
-    <hr class="divider" />
-
-    <!-- 計時與進攻時計：左右 -->
-    <div class="grid grid-2">
-      <!-- 左：比賽計時 -->
-      <div class="card" style="padding:14px;display:flex;flex-direction:column;align-items:center;">
-        <div class="label">比賽計時（Game Clock）</div>
-        <div id="dashGameClock" class="game-display" style="margin-top:6px;">12:00</div>
-        <div id="dashGameInfo" class="muted">長度：12:00</div>
-      </div>
-
-      <!-- 右：進攻時計 -->
-      <div class="card" style="padding:14px;display:flex;flex-direction:column;align-items:center;">
-        <div class="label">進攻時計（Shot Clock）</div>
-        <div id="dashShotClock" class="shot-display" style="margin-top:6px;">24</div>
-        <div id="dashPoss" class="muted">球權：主隊</div>
-      </div>
+    <div class="row center mt8">
+      <span class="label">團隊犯規</span>
+      <span id="dashHomeTF" class="foul-count">0</span>
+      <span id="dashHomeBonus" class="bonus" style="display:none">Bonus</span>
     </div>
+    <div class="row center mt8">
+      <button id="dashHomeTFMinus">-</button>
+      <button id="dashHomeTFPlus" class="btn-warn">+ 犯規</button>
+      <button id="dashHomeTFReset">本節清零</button>
+    </div>
+  </div>
+
+  <!-- 中：比賽名稱 / 節次 -->
+  <div class="card" style="padding:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+    <div id="dashGameTitle" class="score small" style="text-align:center;">比賽名稱</div>
+    <div class="row center mt8">
+      <button id="dashPeriodDec">-</button>
+      <div id="dashPeriod" class="score small">第1節</div>
+      <button id="dashPeriodInc">+</button>
+    </div>
+  </div>
+
+  <!-- 右：客隊 -->
+  <div class="card" style="padding:14px;text-align:right;">
+    <div class="label">客隊</div>
+    <div id="dashAwayName" class="score small">AWAY</div>
+    <div id="dashAwayScore" class="score">0</div>
+
+    <div class="row center mt8" style="justify-content:flex-end;">
+      <button id="dashAwayAdd1">+1</button>
+      <button id="dashAwayAdd2">+2</button>
+      <button id="dashAwayAdd3">+3</button>
+      <button id="dashAwaySub1">-1</button>
+    </div>
+
+    <div class="row center mt8" style="justify-content:flex-end;">
+      <span class="label">團隊犯規</span>
+      <span id="dashAwayTF" class="foul-count">0</span>
+      <span id="dashAwayBonus" class="bonus" style="display:none">Bonus</span>
+    </div>
+    <div class="row center mt8" style="justify-content:flex-end;">
+      <button id="dashAwayTFMinus">-</button>
+      <button id="dashAwayTFPlus" class="btn-warn">+ 犯規</button>
+      <button id="dashAwayTFReset">本節清零</button>
+    </div>
+  </div>
+</div>
+
+<hr class="divider" />
+
+<!-- 計時與進攻時計：左右（含控制） -->
+<div class="grid grid-2">
+  <!-- 左：比賽計時 -->
+  <div class="card" style="padding:14px;display:flex;flex-direction:column;align-items:center;">
+    <div class="label">比賽計時（Game Clock）</div>
+    <div id="dashGameClock" class="game-display" style="margin-top:6px;">12:00</div>
+    <div id="dashGameInfo" class="muted">長度：12:00</div>
+    <div class="row center mt8">
+      <button id="dashGameStart" class="btn-accent">開始</button>
+      <button id="dashGamePause">暫停</button>
+      <button id="dashGameReset">重置本節</button>
+      <button id="dashSet12">12:00</button>
+      <button id="dashSet10">10:00</button>
+      <button id="dashSet5">5:00</button>
+    </div>
+  </div>
+
+  <!-- 右：進攻時計 -->
+  <div class="card" style="padding:14px;display:flex;flex-direction:column;align-items:center;">
+    <div class="label">進攻時計（Shot Clock）</div>
+    <div id="dashShotClock" class="shot-display" style="margin-top:6px;">24</div>
+    <div id="dashPoss" class="muted">球權：主隊</div>
+    <div class="row center mt8">
+      <button id="dashShotStart" class="btn-accent">開始</button>
+      <button id="dashShotPause">暫停</button>
+      <button id="dashShot24">重置 24</button>
+      <button id="dashShot14">重置 14</button>
+      <button id="dashSwap">切換球權</button>
+      <button id="dashShotViolation" class="btn-danger">24秒違例</button>
+    </div>
+  </div>
+</div>
 
     <hr class="divider" />
 
