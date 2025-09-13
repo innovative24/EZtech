@@ -1048,3 +1048,251 @@ function bindEvents(){
   await renderRoster();
   bindEvents();
 })();
+
+/* =========================================================
+   Dashboard Controller (binds to existing app.js state/DB)
+   ========================================================= */
+(()=>{
+  // === 小工具，沿用你現有的輔助 ===
+  const $ = (sel)=>document.querySelector(sel);
+  const sideLabel = (t)=> t==='home'?'主隊':'客隊';
+  const periodLabel = (n)=> n<=4 ? `第${n}節` : `OT${n-4}`;
+  const fmtMin = (ms)=>{ const s=Math.floor(Math.max(0,ms)/1000); const m=Math.floor(s/60); const sec=s%60; return `${m}:${String(sec).padStart(2,'0')}`; };
+  const fmtGame = (ms)=>{
+    const t = Math.max(0, ms|0), s = Math.floor(t/1000), m = Math.floor(s/60), sec = s%60;
+    if(s>=60) return `${String(m)}:${String(sec).padStart(2,'0')}`;
+    const hundred = Math.floor((t%1000)/10);
+    return `${String(m)}:${String(sec)}.${String(hundred).padStart(2,'0')}`;
+  };
+  const fmtShot = (ms)=>{ const s=Math.max(0,ms)/1000; return s>8?String(Math.ceil(s|0)):s.toFixed(2); };
+
+  // 需要用到你在 app.js 的函式 / 變數：
+  // - state
+  // - allPlayers(), get(), put()
+  // - ensurePlayerShape(p), needsFlag(p), fillPlayerForm(p)（若沒有就會跳過）
+
+  // === 嘗試從「比賽名稱」推測 Home / Away 名稱（可選） ===
+  function parseTeamNamesFromTitle(title){
+    if(!title) return {home:'HOME', away:'AWAY'};
+    // 常見分隔：vs、VS、Vs、v.s.、對、：
+    const t = title.replace('：',':');
+    let home='HOME', away='AWAY';
+    const byVs = t.split(/vs|VS|Vs|v\.s\./i);
+    if(byVs.length===2){
+      // 可能是「聯賽A：主隊 vs 客隊」→ 左邊還有聯賽名，再以冒號切
+      const leftParts = byVs[0].split(':');
+      home = (leftParts[leftParts.length-1]||'HOME').trim() || 'HOME';
+      away = (byVs[1]||'AWAY').trim() || 'AWAY';
+      return {home, away};
+    }
+    // 「主隊 對 客隊」
+    const byChinese = t.split('對');
+    if(byChinese.length===2){
+      const leftParts = byChinese[0].split(':');
+      home = (leftParts[leftParts.length-1]||'HOME').trim() || 'HOME';
+      away = (byChinese[1]||'AWAY').trim() || 'AWAY';
+      return {home, away};
+    }
+    return {home:'HOME', away:'AWAY'};
+  }
+
+  // === 卡片渲染 ===
+  const tpl = ()=> $('#dashPlayerCardTpl');
+  function createCardFor(p){
+    const node = tpl().content.firstElementChild.cloneNode(true);
+    const over = (p.PF|0) >= (state?.rules?.limitPF|0 || 5);
+    if(over) node.classList.add('foul-max');
+
+    node.querySelector('.player-avatar').src = p.avatar || '';
+    node.querySelector('.player-num').textContent = `#${p.number||0}`;
+    node.querySelector('.player-name').textContent = p.nameZh || p.nameEn || `球員 ${p.number||''}`;
+    node.querySelector('.player-meta').textContent = `上場：${fmtMin(p.playMs|0)}｜犯規：${p.PF|0}`;
+
+    const stats = {
+      PTS: p.PTS|0, REB: p.REB|0, AST: p.AST|0
+    };
+    const vals = node.querySelectorAll('.player-stats .value');
+    vals[0].textContent = stats.PTS;
+    vals[1].textContent = stats.REB;
+    vals[2].textContent = stats.AST;
+
+    // 點卡片 → 跳到管理（可改成 noop）
+    node.addEventListener('click', async ()=>{
+      try{
+        if(typeof fillPlayerForm === 'function'){ fillPlayerForm(p); }
+        if(typeof setView === 'function'){ setView('playerAdminView'); }
+      }catch(e){}
+    });
+
+    // 在元素上留 id，方便輕量更新
+    node.dataset.pid = p.id;
+    return node;
+  }
+
+  function placeholderCard(){
+    const node = tpl().content.firstElementChild.cloneNode(true);
+    node.querySelector('.player-avatar').src = '';
+    node.querySelector('.player-num').textContent = '#--';
+    node.querySelector('.player-name').textContent = '空位';
+    node.querySelector('.player-meta').textContent = '上場：0:00｜犯規：0';
+    const vals = node.querySelectorAll('.player-stats .value');
+    vals.forEach(v=> v.textContent='0');
+    node.style.opacity = .6;
+    node.classList.remove('foul-max');
+    node.dataset.pid = '';
+    return node;
+  }
+
+  // === Dashboard 主控制 ===
+  const Dashboard = {
+    active: false,
+    lightTimer: null,   // 0.5s 更新（鐘、卡片數字）
+    heavyTimer: null,   // 2s 重新撈玩家 & 重渲染卡片（偵測上場名單/犯滿變化）
+    cacheIds: { home:[], away:[] },
+
+    async renderHeader(){
+      if(!$('#dashboardView')) return;
+      const {home, away} = parseTeamNamesFromTitle(state?.gameTitle||'');
+      $('#dashGameTitle') && ($('#dashGameTitle').textContent = state?.gameTitle || '未命名比賽');
+      $('#dashPeriod') && ($('#dashPeriod').textContent = periodLabel(state?.period||1));
+      $('#dashHomeName') && ($('#dashHomeName').textContent = home);
+      $('#dashAwayName') && ($('#dashAwayName').textContent = away);
+      $('#dashHomeTeamName') && ($('#dashHomeTeamName').textContent = sideLabel('home') + '｜' + home);
+      $('#dashAwayTeamName') && ($('#dashAwayTeamName').textContent = sideLabel('away') + '｜' + away);
+
+      // 分數
+      $('#dashHomeScore') && ($('#dashHomeScore').textContent = state?.home?.score|0);
+      $('#dashAwayScore') && ($('#dashAwayScore').textContent = state?.away?.score|0);
+    },
+
+    renderClocks(){
+      if(!$('#dashboardView')) return;
+      // 比賽時計
+      const gms = state?.game?.ms ?? 0;
+      $('#dashGameClock') && ($('#dashGameClock').textContent = fmtGame(gms));
+      $('#dashGameInfo') && ($('#dashGameInfo').textContent = `長度：${fmtGame(state?.game?.totalMs ?? 0)}`);
+
+      // 進攻時計
+      const sms = state?.shot?.ms ?? 0;
+      const shotEl = $('#dashShotClock');
+      if(shotEl){
+        shotEl.textContent = fmtShot(sms);
+        const s = sms/1000;
+        shotEl.classList.toggle('shot-danger', s<=8);
+      }
+      $('#dashPoss') && ($('#dashPoss').textContent = `球權：${sideLabel(state?.shot?.poss || 'home')}`);
+    },
+
+    async renderFive(){
+      const list = (await allPlayers()).map(p=> ensurePlayerShape(p));
+      const homeOn = list.filter(p=> p.team==='home' && p.oncourt).sort((a,b)=> (a.number|0)-(b.number|0)).slice(0,5);
+      const awayOn = list.filter(p=> p.team==='away' && p.oncourt).sort((a,b)=> (a.number|0)-(b.number|0)).slice(0,5);
+
+      // 重繪（若上場名單與 cache 不同）
+      const ids = { home:homeOn.map(p=>p.id), away:awayOn.map(p=>p.id) };
+      const needRerender = JSON.stringify(ids)!==JSON.stringify(this.cacheIds);
+
+      if(needRerender){
+        const homeWrap = $('#dashHomeFive'); if(homeWrap){ homeWrap.innerHTML=''; }
+        const awayWrap = $('#dashAwayFive'); if(awayWrap){ awayWrap.innerHTML=''; }
+
+        // 主隊
+        if($('#dashHomeFive')){
+          homeOn.forEach(p=> $('#dashHomeFive').appendChild(createCardFor(p)));
+          for(let i=homeOn.length;i<5;i++){ $('#dashHomeFive').appendChild(placeholderCard()); }
+        }
+        // 客隊
+        if($('#dashAwayFive')){
+          awayOn.forEach(p=> $('#dashAwayFive').appendChild(createCardFor(p)));
+          for(let i=awayOn.length;i<5;i++){ $('#dashAwayFive').appendChild(placeholderCard()); }
+        }
+        this.cacheIds = ids;
+      }
+
+      // 輕量數字更新（PTS/REB/AST、PF、上場時間、犯滿樣式）
+      const map = new Map(list.map(p=> [p.id, p]));
+      const updWrap = (wrapSel)=>{
+        const wrap = $(wrapSel); if(!wrap) return;
+        Array.from(wrap.children).forEach(card=>{
+          const pid = card.dataset.pid;
+          if(!pid) return; // placeholder
+          const p = map.get(pid); if(!p) return;
+          // meta：上場時間｜犯規
+          const meta = card.querySelector('.player-meta');
+          if(meta) meta.textContent = `上場：${fmtMin(p.playMs|0)}｜犯規：${p.PF|0}`;
+          // stats
+          const vals = card.querySelectorAll('.player-stats .value');
+          if(vals[0]) vals[0].textContent = p.PTS|0;
+          if(vals[1]) vals[1].textContent = p.REB|0;
+          if(vals[2]) vals[2].textContent = p.AST|0;
+          // 犯滿樣式
+          const over = (p.PF|0) >= (state?.rules?.limitPF|0 || 5);
+          card.classList.toggle('foul-max', over);
+        });
+      };
+      updWrap('#dashHomeFive');
+      updWrap('#dashAwayFive');
+
+      // 分數與節次也順手同步
+      $('#dashHomeScore') && ($('#dashHomeScore').textContent = state?.home?.score|0);
+      $('#dashAwayScore') && ($('#dashAwayScore').textContent = state?.away?.score|0);
+      $('#dashPeriod') && ($('#dashPeriod').textContent = periodLabel(state?.period||1));
+    },
+
+    async activate(){
+      if(this.active) return;
+      this.active = true;
+      await this.renderHeader();
+      this.renderClocks();
+      await this.renderFive();
+
+      // 輕量更新（鐘＆卡片數字）
+      this.lightTimer = setInterval(()=>{
+        if(!this.active) return;
+        try{
+          this.renderClocks();
+        }catch(e){}
+      }, 500);
+
+      // 重撈資料（偵測名單/數值大變動）
+      this.heavyTimer = setInterval(async ()=>{
+        if(!this.active) return;
+        try{
+          await this.renderHeader();
+          await this.renderFive();
+        }catch(e){}
+      }, 2000);
+    },
+
+    deactivate(){
+      this.active = false;
+      if(this.lightTimer){ clearInterval(this.lightTimer); this.lightTimer=null; }
+      if(this.heavyTimer){ clearInterval(this.heavyTimer); this.heavyTimer=null; }
+    }
+  };
+
+  // === 與既有 setView 整合：覆寫為包裝器 ===
+  if(typeof setView === 'function'){
+    const __setView = setView;
+    window.setView = function(viewId){
+      __setView(viewId);
+      if(viewId==='dashboardView'){ Dashboard.activate(); } else { Dashboard.deactivate(); }
+    };
+  }else{
+    // 若此段載入時 setView 尚未定義，保險起見也監聽 tab 點擊
+    document.addEventListener('click', (e)=>{
+      const btn = e.target.closest('.tab');
+      if(!btn) return;
+      const v = btn.dataset.view;
+      if(v==='dashboardView'){ Dashboard.activate(); } else { Dashboard.deactivate(); }
+    });
+  }
+
+  // 如果一開啟就落在 Dashboard，也要啟動
+  if(document.querySelector('.view#dashboardView')?.classList.contains('active')){
+    Dashboard.activate();
+  }
+
+  // 暴露到全域，萬一你之後想手動 refresh
+  window.__Dashboard = Dashboard;
+})();
