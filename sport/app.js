@@ -1296,3 +1296,86 @@ function bindEvents(){
   // 暴露到全域，萬一你之後想手動 refresh
   window.__Dashboard = Dashboard;
 })();
+
+/* ===== Dashboard 操作綁定（與現有邏輯共用） ===== */
+(function bindDashboardOps(){
+  const $ = (s)=>document.querySelector(s);
+  const BONUS_LIMIT = 5;
+
+  // —— 計分 —— //
+  $('#dashHomeAdd1')?.addEventListener('click', ()=> setScore('home', state.home.score+1));
+  $('#dashHomeAdd2')?.addEventListener('click', ()=> setScore('home', state.home.score+2));
+  $('#dashHomeAdd3')?.addEventListener('click', ()=> setScore('home', state.home.score+3));
+  $('#dashHomeSub1')?.addEventListener('click', ()=> setScore('home', state.home.score-1));
+
+  $('#dashAwayAdd1')?.addEventListener('click', ()=> setScore('away', state.away.score+1));
+  $('#dashAwayAdd2')?.addEventListener('click', ()=> setScore('away', state.away.score+2));
+  $('#dashAwayAdd3')?.addEventListener('click', ()=> setScore('away', state.away.score+3));
+  $('#dashAwaySub1')?.addEventListener('click', ()=> setScore('away', state.away.score-1));
+
+  // —— 團隊犯規（同步 Bonus 顯示） —— //
+  function syncDashTeamFouls(){
+    const set = (side)=>{
+      const n = state[side].teamFouls|0;
+      const tf = side==='home' ? $('#dashHomeTF') : $('#dashAwayTF');
+      const b  = side==='home' ? $('#dashHomeBonus') : $('#dashAwayBonus');
+      if(tf) tf.textContent = n;
+      if(b)  b.style.display = n>=BONUS_LIMIT ? 'inline-flex':'none';
+    };
+    set('home'); set('away');
+  }
+  $('#dashHomeTFPlus')?.addEventListener('click', ()=>{ addTeamFoul('home', +1); syncDashTeamFouls(); });
+  $('#dashHomeTFMinus')?.addEventListener('click', ()=>{ addTeamFoul('home', -1); syncDashTeamFouls(); });
+  $('#dashHomeTFReset')?.addEventListener('click', ()=>{ state.home.teamFouls=0; syncDashTeamFouls(); saveState(); });
+
+  $('#dashAwayTFPlus')?.addEventListener('click', ()=>{ addTeamFoul('away', +1); syncDashTeamFouls(); });
+  $('#dashAwayTFMinus')?.addEventListener('click', ()=>{ addTeamFoul('away', -1); syncDashTeamFouls(); });
+  $('#dashAwayTFReset')?.addEventListener('click', ()=>{ state.away.teamFouls=0; syncDashTeamFouls(); saveState(); });
+
+  // 初始同步一次
+  syncDashTeamFouls();
+
+  // —— 節次 —— //
+  function renderDashPeriod(){ $('#dashPeriod') && ($('#dashPeriod').textContent = (state.period<=4?`第${state.period}節`:`OT${state.period-4}`)); }
+  $('#dashPeriodInc')?.addEventListener('click', ()=>{ state.period=(state.period|0)+1; if(state.period>4){ state.game.totalMs=5*60*1000; } resetGameClock(); resetTeamFouls(); resetShot(24000,{autoRunIfLinked:true}); renderDashPeriod(); saveState(); });
+  $('#dashPeriodDec')?.addEventListener('click', ()=>{ state.period=Math.max(1,(state.period|0)-1); if(state.period>4){ state.game.totalMs=5*60*1000; } resetGameClock(); resetTeamFouls(); resetShot(24000,{autoRunIfLinked:true}); renderDashPeriod(); saveState(); });
+  renderDashPeriod();
+
+  // —— Game Clock —— //
+  $('#dashGameStart')?.addEventListener('click', ()=> startGame());
+  $('#dashGamePause')?.addEventListener('click', ()=> pauseGame());
+  $('#dashGameReset')?.addEventListener('click', ()=> resetGameClock());
+  $('#dashSet12')?.addEventListener('click', ()=> setGameLength(12));
+  $('#dashSet10')?.addEventListener('click', ()=> setGameLength(10));
+  $('#dashSet5')?.addEventListener('click',  ()=> setGameLength(5));
+
+  // —— Shot Clock —— //
+  $('#dashShotStart')?.addEventListener('click', ()=> startShot());
+  $('#dashShotPause')?.addEventListener('click', ()=> pauseShot());
+  $('#dashShot24')?.addEventListener('click', ()=> resetShot(24000,{autoRunIfLinked:true}));
+  $('#dashShot14')?.addEventListener('click', ()=> resetShot(14000,{autoRunIfLinked:true}));
+  $('#dashSwap')?.addEventListener('click', ()=>{ state.shot.poss = (state.shot.poss==='home'?'away':'home'); saveState(); });
+  $('#dashShotViolation')?.addEventListener('click', ()=> shotViolationManual());
+
+  // —— 分數/團犯/節次 由 app.js 狀態變更時也能反映 —— //
+  const _origSetScore = window.setScore;
+  if(typeof _origSetScore === 'function'){
+    window.setScore = function(side, val){
+      _origSetScore(side, val);
+      if(side==='home'){ $('#dashHomeScore') && ($('#dashHomeScore').textContent = state.home.score); }
+      else{ $('#dashAwayScore') && ($('#dashAwayScore').textContent = state.away.score); }
+    };
+  }
+  const _origRenderTeamFouls = window.renderTeamFouls;
+  if(typeof _origRenderTeamFouls === 'function'){
+    window.renderTeamFouls = function(side){
+      _origRenderTeamFouls(side);
+      // 再同步 Dashboard 的團犯與 Bonus
+      const n = state[side].teamFouls|0;
+      const tf = side==='home' ? $('#dashHomeTF') : $('#dashAwayTF');
+      const b  = side==='home' ? $('#dashHomeBonus') : $('#dashAwayBonus');
+      if(tf) tf.textContent = n;
+      if(b)  b.style.display = n>=BONUS_LIMIT ? 'inline-flex':'none';
+    };
+  }
+})();
