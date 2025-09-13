@@ -296,3 +296,122 @@ input[type="number"]{ -moz-appearance:textfield; }
   .tab{ padding:8px 10px }
   th,td{ padding:8px 10px }
 }
+
+
+/* ===============================
+   Dashboard 專用樣式
+   =============================== */
+
+/* --- 計分區 --- */
+#dashboardView .score {
+  font-size: 48px;
+  font-weight: 900;
+  text-align: center;
+  letter-spacing: 1px;
+}
+
+#dashboardView .score.small {
+  font-size: 22px;
+  color: var(--fg-dim);
+  font-weight: 600;
+}
+
+#dashboardView .card {
+  text-align: center;
+}
+
+/* --- 計時區 --- */
+#dashboardView .game-display,
+#dashboardView .shot-display {
+  font-size: 56px;
+  font-weight: 900;
+  font-family: ui-monospace, Menlo, Consolas;
+  letter-spacing: 2px;
+  text-shadow: 0 4px 16px rgba(0,0,0,.35);
+}
+
+#dashboardView .shot-display {
+  color: var(--accent-2);
+}
+#dashboardView .shot-danger {
+  color: var(--danger);
+}
+
+/* --- 球員卡片區 --- */
+#dashboardView #dashHomeFive,
+#dashboardView #dashAwayFive {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+#dashboardView .player-card {
+  width: 220px;
+  padding: 14px;
+  background: linear-gradient(180deg,#101a31,#0b1224);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: transform .15s ease, box-shadow .2s ease;
+}
+#dashboardView .player-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 18px rgba(0,0,0,.4);
+}
+
+/* 頭像 */
+#dashboardView .player-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  background: #0a1222;
+  box-shadow: var(--shadow-in);
+}
+
+/* 上方基本資訊 */
+#dashboardView .player-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+#dashboardView .player-num {
+  font-size: 20px;
+  font-weight: 800;
+  font-family: ui-monospace, Menlo, Consolas;
+}
+#dashboardView .player-name {
+  font-weight: 700;
+  font-size: 15px;
+}
+#dashboardView .player-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* 簡要統計區 */
+#dashboardView .player-stats {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+}
+#dashboardView .stat .label {
+  font-size: 11px;
+  color: var(--fg-dim);
+}
+#dashboardView .stat .value {
+  font-size: 20px;
+  font-weight: 800;
+  font-family: ui-monospace, Menlo, Consolas;
+}
+
+/* 犯滿警示 */
+#dashboardView .foul-max {
+  background: rgba(239,68,68,.2);
+  border: 1px solid var(--danger);
+}
