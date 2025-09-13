@@ -36,6 +36,7 @@ const allPlayers = ()=>new Promise((res,rej)=>{ const r=tx('players').getAll(); 
 
 /* ========== State ========== */
 const state = {
+  teamNames: { home:'', away:'' },
   gameTitle:'',
   period:1,
   home:{score:0,timeouts:6,teamFouls:0},
@@ -64,6 +65,7 @@ const fmtMin = (ms)=>{ const s=Math.floor(Math.max(0,ms)/1000); const m=Math.flo
 
 /* ========== Init / Load ========== */
 async function loadState(){
+  teamNames: { home:'', away:'' },
   const saved = await get('game','state');
   if(saved){ Object.assign(state,saved.v||saved); }
   if($('#gameTitle')) $('#gameTitle').value = state.gameTitle || '';
@@ -120,7 +122,14 @@ function resetTeamFouls(){
 /* ========== Players (with advanced profile) ========== */
 function ensurePlayerShape(p){
   // Base identity fields (for Admin page)
-  p.team = p.team || 'home';
+  // --- 新增欄位 / 相容處理 ---
+  p.teamSide = p.teamSide || p.team || 'home';   // 舊資料用 p.team 回填
+  p.teamName = p.teamName || '';                 // 顯示用球隊名稱
+  p.team = p.teamSide;                           // 相容舊程式
+
+  p.team = p.teamSide;
+  p.number = Number(p.number||0);
+  p.team = p.teamSide || 'home';
   p.number = Number(p.number||0);
   p.nameZh = p.nameZh || p.name || ''; // backward compatible
   p.nameEn = p.nameEn || '';
@@ -170,7 +179,7 @@ function trForPlayer(p0){
   else if(overPF) tr.classList.add('tr-flag');
 
   const cells = [
-    ['team', p.team==='home'?'主隊':'客隊', false],
+    ['team', p.teamSide==='home'?'主隊':'客隊', false],
     ['number', p.number, true],
     ['nameZh', p.nameZh||'', true],
     ['pos', p.pos||'', true],
@@ -489,7 +498,7 @@ function buildTxt(players){
   players.sort((a,b)=> (a.team===b.team?0:(a.team==='home'?-1:1)) || (a.number-b.number))
     .forEach(p=>{
       p=ensurePlayerShape(p);
-      const row=[p.team,p.number,p.nameZh||p.name||'',p.pos,p.PTS|0,(p.PF|0),(p.PFOFF|0),(p.PFT|0),(p.PFU|0),p.AST|0,p.REB|0,p.STL|0,p.BLK|0,p.TOV|0,p.oncourt?1:0,fmtMin(p.playMs)];
+      const row=[p.teamSide,p.number,p.nameZh||p.name||'',p.pos,p.PTS|0,(p.PF|0),(p.PFOFF|0),(p.PFT|0),(p.PFU|0),p.AST|0,p.REB|0,p.STL|0,p.BLK|0,p.TOV|0,p.oncourt?1:0,fmtMin(p.playMs)];
       L.push(row.join(','));
     });
   const notes = ($('#notes')?.value||'').trim();
@@ -509,7 +518,7 @@ function buildCSV(players){
   players.sort((a,b)=> (a.team===b.team?0:(a.team==='home'?-1:1)) || (a.number-b.number))
     .forEach(p=>{
       p=ensurePlayerShape(p);
-      rows.push([p.team,p.number,p.nameZh||p.name||'',p.pos,p.PTS|0,(p.PF|0),(p.PFOFF|0),(p.PFT|0),(p.PFU|0),p.AST|0,p.REB|0,p.STL|0,p.BLK|0,p.TOV|0,p.oncourt?1:0,fmtMin(p.playMs)]);
+      rows.push([p.teamSide,p.number,p.nameZh||p.name||'',p.pos,p.PTS|0,(p.PF|0),(p.PFOFF|0),(p.PFT|0),(p.PFU|0),p.AST|0,p.REB|0,p.STL|0,p.BLK|0,p.TOV|0,p.oncourt?1:0,fmtMin(p.playMs)]);
     });
   return rows.map(r=>r.join(',')).join('\r\n');
 }
@@ -525,7 +534,7 @@ function buildJSON(players){
       referees: state.referees
     },
     players: players.map(p=>({
-      team:p.team, number:p.number, nameZh:p.nameZh||p.name||'', nameEn:p.nameEn||'',
+      team:p.teamSide, number:p.number, nameZh:p.nameZh||p.name||'', nameEn:p.nameEn||'',
       pos:p.pos, role:p.role, height:p.height, weight:p.weight, dob:p.dob, nationality:p.nationality,
       hand:p.hand, arc:p.arc, numberStyle:p.numberStyle, regId:p.regId, email:p.email, phone:p.phone, avatar:p.avatar||'',
       stats:{ PTS:p.PTS|0, PF_total:p.PF|0, PF_off:p.PFOFF|0, PF_tech:p.PFT|0, PF_unspt:p.PFU|0, AST:p.AST|0, REB:p.REB|0, STL:p.STL|0, BLK:p.BLK|0, TOV:p.TOV|0 },
@@ -619,7 +628,7 @@ function clearPlayerForm(){
 }
 function fillPlayerForm(p){
   p=ensurePlayerShape(p);
-  fm.team().value = p.team;
+  fm.team().value = p.teamSide;
   fm.number().value = p.number;
   fm.nameZh().value = p.nameZh||'';
   fm.nameEn().value = p.nameEn||'';
@@ -654,55 +663,77 @@ async function resolveAvatarValue(){
   return '';
 }
 async function savePlayerFromForm(){
-  const team = fm.team().value || 'home';
-  const number = parseInt(fm.number().value||'0',10);
+  const teamName = ($('#fmTeamName')?.value || '').trim();           // 新：球隊名稱
+  const side = ($('#fmSide')?.value || 'home');                      // 新：本場歸屬
+  const number = parseInt($('#fmNumber')?.value || '0', 10);
+
   if(!number){ alert('請輸入背號（數字）'); return; }
-  const avatar = await resolveAvatarValue();
+  if(side!=='home' && side!=='away'){ alert('本場歸屬必須是主或客'); return; }
+
+  const avatar = await resolveAvatarValue?.() || '';
   const rec = ensurePlayerShape({
-    id: idOf(team, number),
-    team, number,
-    nameZh: fm.nameZh().value.trim(),
-    nameEn: fm.nameEn().value.trim(),
-    pos: fm.pos().value,
-    role: fm.role().value,
-    height: parseInt(fm.height().value||'0',10)||0,
-    weight: parseInt(fm.weight().value||'0',10)||0,
-    dob: fm.dob().value || '',
-    nationality: fm.nationality().value.trim(),
-    hand: fm.hand().value,
-    arc: fm.arc().value,
-    numberStyle: fm.numberStyle().value.trim(),
-    regId: fm.regId().value.trim(),
-    email: fm.email().value.trim(),
-    phone: fm.phone().value.trim(),
+    id: idOf(side, number),
+    teamSide: side,
+    teamName: teamName,
+    team: side,              // 相容舊欄位
+    number,
+
+    nameZh: $('#fmNameZh')?.value.trim() || '',
+    nameEn: $('#fmNameEn')?.value.trim() || '',
+    pos: $('#fmPos')?.value || 'PG',
+    role: $('#fmRole')?.value || 'bench',
+    height: parseInt($('#fmHeight')?.value || '0', 10) || 0,
+    weight: parseInt($('#fmWeight')?.value || '0', 10) || 0,
+    dob: $('#fmDob')?.value || '',
+    nationality: $('#fmNationality')?.value.trim() || '',
+    hand: $('#fmHand')?.value || 'R',
+    arc: $('#fmArc')?.value || '',
+    numberStyle: $('#fmNumberStyle')?.value.trim() || '',
+    regId: $('#fmRegId')?.value.trim() || '',
+    email: $('#fmEmail')?.value.trim() || '',
+    phone: $('#fmPhone')?.value.trim() || '',
     avatar
   });
-  // merge existing stats if present
+
+  // 合併既有統計（若同 side+number 已存在）
   const existed = await get('players', rec.id);
   if(existed){
-    rec.PTS = existed.PTS|0; rec.AST = existed.AST|0; rec.REB = existed.REB|0; rec.STL = existed.STL|0; rec.BLK = existed.BLK|0; rec.TOV = existed.TOV|0;
-    rec.PF = existed.PF|0; rec.PFOFF = existed.PFOFF|0; rec.PFT = existed.PFT|0; rec.PFU = existed.PFU|0;
-    rec.oncourt = !!existed.oncourt; rec.playMs = existed.playMs|0;
-    rec.alertedPF = !!existed.alertedPF; rec.alertedT = !!existed.alertedT; rec.alertedU = !!existed.alertedU;
+    rec.PTS=existed.PTS|0; rec.AST=existed.AST|0; rec.REB=existed.REB|0; rec.STL=existed.STL|0; rec.BLK=existed.BLK|0; rec.TOV=existed.TOV|0;
+    rec.PF=existed.PF|0; rec.PFOFF=existed.PFOFF|0; rec.PFT=existed.PFT|0; rec.PFU=existed.PFU|0;
+    rec.oncourt=!!existed.oncourt; rec.playMs=existed.playMs|0;
+    rec.alertedPF=!!existed.alertedPF; rec.alertedT=!!existed.alertedT; rec.alertedU=!!existed.alertedU;
   }
+
   await put('players', rec);
+
+  // 同步 state 裡的隊名（Dashboard/索引顯示可用）
+  if(teamName){
+    state.teamNames = state.teamNames || {home:'', away:''};
+    state.teamNames[side] = teamName;
+    await saveState();
+  }
+
   alert('已儲存 / 更新球員');
-  renderPlayers();
+
+  // ✅ 只刷新索引 / Dashboard（不開管理名單）
   if (typeof window.renderPlayersCardsV2 === 'function') window.renderPlayersCardsV2();
+  if (typeof window.__Dashboard?.renderFive === 'function') window.__Dashboard.renderFive();
+  // 若還用到舊 players 表格
+  if (typeof renderPlayers === 'function') renderPlayers();
 }
 
 function applyRosterFilterKeyword(p, kw){
   if(!kw) return true;
   const k = kw.toLowerCase();
   return [
-    p.team, String(p.number), p.nameZh||'', p.nameEn||'', p.pos||'', p.role||'', p.nationality||'', p.regId||''
+    p.teamSide, String(p.number), p.nameZh||'', p.nameEn||'', p.pos||'', p.role||'', p.nationality||'', p.regId||''
   ].some(v=> String(v).toLowerCase().includes(k));
 }
 async function renderRoster(){
   const filterTeam = $('#filterTeam')?.value || 'all';
   const kw = $('#filterKeyword')?.value?.trim() || '';
   const list = (await allPlayers()).map(ensurePlayerShape)
-    .filter(p=> filterTeam==='all' ? true : p.team===filterTeam)
+    .filter(p=> filterTeam==='all' ? true : p.teamSide===filterTeam)
     .filter(p=> applyRosterFilterKeyword(p, kw))
     .sort((a,b)=> (a.team===b.team?0:(a.team==='home'?-1:1)) || (a.number-b.number));
   const tb = $('#rosterTbl tbody'); if(!tb) return;
@@ -735,7 +766,7 @@ async function exportRosterCSV(){
   const head = ['team','number','nameZh','nameEn','pos','height','weight','dob','nationality','role','hand','regId','email','phone','avatarUrl'];
   const rows = [head];
   players.forEach(p=>{
-    rows.push([p.team,p.number,p.nameZh||'',p.nameEn||'',p.pos||'',p.height||'',p.weight||'',p.dob||'',p.nationality||'',p.role||'',p.hand||'',p.regId||'',p.email||'',p.phone||'',p.avatar||'']);
+    rows.push([p.teamSide,p.number,p.nameZh||'',p.nameEn||'',p.pos||'',p.height||'',p.weight||'',p.dob||'',p.nationality||'',p.role||'',p.hand||'',p.regId||'',p.email||'',p.phone||'',p.avatar||'']);
   });
   const csv = rosterToCSV(rows);
   const bom = '\ufeff';
@@ -1112,6 +1143,14 @@ function bindEvents(){
     lightTimer: null,   // 0.5s 更新（鐘、卡片數字）
     heavyTimer: null,   // 2s 重新撈玩家 & 重渲染卡片（偵測上場名單/犯滿變化）
     cacheIds: { home:[], away:[] },
+    
+    function teamDisplayNames(){
+  const s = state.teamNames || {};
+  if (s.home || s.away) return { home: s.home || 'HOME', away: s.away || 'AWAY' };
+  // fallback：你原本的 parseTeamNamesFromTitle(title)
+  return parseTeamNamesFromTitle(state?.gameTitle||'');
+}
+
 
     async renderHeader(){
       if(!$('#dashboardView')) return;
@@ -1148,8 +1187,8 @@ function bindEvents(){
 
     async renderFive(){
       const list = (await allPlayers()).map(p=> ensurePlayerShape(p));
-      const homeOn = list.filter(p=> p.team==='home' && p.oncourt).sort((a,b)=> (a.number|0)-(b.number|0)).slice(0,5);
-      const awayOn = list.filter(p=> p.team==='away' && p.oncourt).sort((a,b)=> (a.number|0)-(b.number|0)).slice(0,5);
+      const homeOn = list.filter(p=> p.teamSide==='home' && p.oncourt).sort((a,b)=> (a.number|0)-(b.number|0)).slice(0,5);
+      const awayOn = list.filter(p=> p.teamSide==='away' && p.oncourt).sort((a,b)=> (a.number|0)-(b.number|0)).slice(0,5);
 
       // 重繪（若上場名單與 cache 不同）
       const ids = { home:homeOn.map(p=>p.id), away:awayOn.map(p=>p.id) };
@@ -1350,7 +1389,7 @@ function bindEvents(){
   const sideLabel = (t)=> t==='home'?'主隊':'客隊';
 
   function passFilter(p, team, pos, onlyOn){
-    if(team!=='all' && p.team!==team) return false;
+    if(team!=='all' && p.teamSide!==team) return false;
     if(pos!=='all' && (p.pos||'').toUpperCase()!==pos.toUpperCase()) return false;
     if(onlyOn && !p.oncourt) return false;
     return true;
@@ -1365,7 +1404,7 @@ function bindEvents(){
         <div class="flex1">
           <div class="row space-between">
             <div class="player-num">#${p.number||0}</div>
-            <div class="chip">${sideLabel(p.team)}</div>
+            <div class="chip">${sideLabel(p.teamSide)}</div>
           </div>
           <div class="player-name">${p.nameZh||p.nameEn||''}</div>
           <div class="player-meta">上場：${fmtMin(p.playMs|0)}｜犯規：${p.PF|0}</div>
@@ -1451,7 +1490,7 @@ function bindEvents(){
     ].some(v=> String(v).toLowerCase().includes(k));
   }
   function passFilter(p, team, pos, arc, role, kw){
-    if(team!=='all' && p.team!==team) return false;
+    if(team!=='all' && p.teamSide!==team) return false;
     if(pos!=='all' && (p.pos||'').toUpperCase()!==pos.toUpperCase()) return false;
     if(arc!=='all'){ const a = (p.arc||''); if(arc==='' ? a!=='' : a!==arc) return false; }
     if(role!=='all' && (p.role||'bench')!==role) return false;
@@ -1462,12 +1501,15 @@ function bindEvents(){
   function buildCard(p){
     const node = tpl().content.firstElementChild.cloneNode(true);
     node.dataset.pid = p.id;
-    node.dataset.team = p.team; 
+    node.dataset.team = p.teamSide; 
     node.querySelector('.player-avatar').src = p.avatar || '';
     node.querySelector('.player-num').textContent = `#${p.number||0}`;
-    node.querySelector('.team-chip').textContent = sideLabel(p.team);
+    node.querySelector('.team-chip').textContent = sideLabel(p.teamSide);
     node.querySelector('.player-name').textContent = p.nameZh || p.nameEn || `球員 ${p.number||''}`;
     node.querySelector('.player-meta').textContent = `${p.pos||''}｜上場：${fmtMin(p.playMs|0)}｜犯規：${p.PF|0}`;
+    const label = p.teamSideName || (p.teamSideSide==='home'?'主隊':'客隊');
+node.querySelector('.team-chip').textContent = label;
+node.dataset.team = p.teamSide; // 繼續用 side 來上色
     const vals = node.querySelectorAll('.player-stats .value');
     vals[0].textContent = p.PTS|0;
     vals[1].textContent = p.REB|0;
