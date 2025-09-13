@@ -54,12 +54,16 @@ th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06
 .view{display:none}
 .view.active{display:block}
 
-/* Fouls */
+/* Fouls & players */
 .bonus{padding:2px 8px;border-radius:999px;background:#451a03;color:#ffedd5;border:1px solid #78350f;font-size:12px}
 .foul-count{font:700 24px/1 ui-monospace,Menlo,Consolas,monospace}
 .opbtn{font-size:12px;padding:4px 8px;border-radius:8px}
 .opset{display:flex;flex-wrap:wrap;gap:6px}
-
-/* 警示樣式 */
 .tr-flag { background: rgba(239,68,68,.12); }
 .tr-eject { background: rgba(239,68,68,.22); border-left: 3px solid #ef4444; }
+
+/* Modal for free throws */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:20}
+.modal-box{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:320px;max-width:520px}
+.ft-shots{display:flex;flex-wrap:wrap;gap:8px}
+.ft-btn{min-width:90px}
