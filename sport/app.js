@@ -1,6 +1,6 @@
 // ====== 常數 ======
 const DB_NAME = 'basket-scoreboard';
-const DB_VER  = 6; // 升版：加入犯規細分 + 規則設定
+const DB_VER  = 7; // 新：事件面板 + 上限提醒/退場
 const BONUS_LIMIT = 5;
 
 // ====== IndexedDB ======
@@ -37,19 +37,21 @@ const state = {
   period:1,
   home:{score:0,timeouts:6,teamFouls:0},
   away:{score:0,timeouts:6,teamFouls:0},
-  // 規則：哪些犯規列入團隊犯規
   rules:{
-    countCommon:true,        // 一般（含防守/非控球）
-    countOffensive:false,    // 進攻犯規（team control）
-    countTechnical:false,    // 技術犯規
-    countUnsportsmanlike:true// 違體犯規
+    countCommon:true,
+    countOffensive:false,
+    countTechnical:false,
+    countUnsportsmanlike:true,
+    limitPF:5,  // 個人犯規上限
+    limitT:2,   // 技犯上限
+    limitU:2    // 違體上限
   },
   shot:{ ms:24000, running:false, lastTs:null, poss:'home' },
   game:{ ms:12*60*1000, totalMs:12*60*1000, running:false, lastTs:null, linkShot:false },
   ui:{ view:'scoreView' }
 };
 
-// 安全 deep copy（替代 structuredClone）
+// 工具
 const deepCopy = (o)=>JSON.parse(JSON.stringify(o));
 async function saveState(){ await put('game',{k:'state', v:deepCopy(state)}); }
 const $ = (sel)=>document.querySelector(sel);
@@ -65,13 +67,16 @@ async function loadState(){
   setScore('away', state.away.score);
   renderTeamFouls('home'); renderTeamFouls('away');
   renderPeriod();
-  updateShotUI(true);
-  updateGameUI(true);
+  updateShotUI(true); updateGameUI(true);
   // 規則 UI
   $('#ruleCountCommon').checked = !!state.rules.countCommon;
   $('#ruleCountOffensive').checked = !!state.rules.countOffensive;
   $('#ruleCountTechnical').checked = !!state.rules.countTechnical;
   $('#ruleCountUnsportsmanlike').checked = !!state.rules.countUnsportsmanlike;
+  $('#limitPF').value = state.rules.limitPF;
+  $('#limitT').value  = state.rules.limitT;
+  $('#limitU').value  = state.rules.limitU;
+
   setView(state.ui.view || 'scoreView');
   if(state.shot.running) startShot(true);
   if(state.game.running) startGame(true);
@@ -101,19 +106,33 @@ function resetTeamFouls(){
   renderTeamFouls('home'); renderTeamFouls('away');
 }
 
-// ====== 球員表格（含犯規細分） ======
+// ====== 球員表格（含犯規細分 + 警示） ======
 function ensurePlayerShape(p){
-  // 新欄位預設值
-  p.PF  = p.PF|0;
-  p.PFOFF = p.PFOFF|0; // 進攻
-  p.PFT = p.PFT|0;     // 技術
-  p.PFU = p.PFU|0;     // 違體
+  p.PTS|=0; p.AST|=0; p.REB|=0; p.STL|=0; p.BLK|=0; p.TOV|=0;
+  p.PF|=0; p.PFOFF|=0; p.PFT|=0; p.PFU|=0;
+  // 提醒旗標（同場僅提醒一次）
+  if(p.alertedPF===undefined) p.alertedPF=false;
+  if(p.alertedT===undefined)  p.alertedT=false;
+  if(p.alertedU===undefined)  p.alertedU=false;
   return p;
+}
+
+function needsFlag(p){
+  const overPF = (p.PF|0) >= (state.rules.limitPF|0);
+  const overT  = (p.PFT|0) >= (state.rules.limitT|0);
+  const overU  = (p.PFU|0) >= (state.rules.limitU|0);
+  return { overPF, overT, overU };
 }
 
 function trForPlayer(p0){
   const p = ensurePlayerShape(p0);
   const tr = document.createElement('tr'); tr.dataset.id=p.id;
+
+  // 樣式：達上限標紅；T/U 上限視為退場加重底色
+  const {overPF,overT,overU} = needsFlag(p);
+  if(overT || overU) tr.classList.add('tr-eject');
+  else if(overPF) tr.classList.add('tr-flag');
+
   const cells = [
     ['team', p.team==='home'?'主隊':'客隊', false],
     ['number', p.number, true],
@@ -155,26 +174,20 @@ function trForPlayer(p0){
     }
     tr.appendChild(td);
   }
+
   const op = document.createElement('td');
   const box = document.createElement('div'); box.className='opset';
-
   const mkBtn=(txt, cls, fn)=>{ const b=document.createElement('button'); b.textContent=txt; b.className='opbtn '+(cls||''); b.addEventListener('click', fn); return b; };
-
-  // 加法
   box.appendChild(mkBtn('+ 一般','btn-warn', ()=> updatePersonalFoul(p.id,'common', +1)));
   box.appendChild(mkBtn('+ 進攻','btn-warn', ()=> updatePersonalFoul(p.id,'offensive', +1)));
   box.appendChild(mkBtn('+ 技','btn-warn', ()=> updatePersonalFoul(p.id,'technical', +1)));
   box.appendChild(mkBtn('+ 違體','btn-warn', ()=> updatePersonalFoul(p.id,'unsportsmanlike', +1)));
-  // 減法
   box.appendChild(mkBtn('- 一般',null, ()=> updatePersonalFoul(p.id,'common', -1)));
   box.appendChild(mkBtn('- 進攻',null, ()=> updatePersonalFoul(p.id,'offensive', -1)));
   box.appendChild(mkBtn('- 技',null, ()=> updatePersonalFoul(p.id,'technical', -1)));
   box.appendChild(mkBtn('- 違體',null, ()=> updatePersonalFoul(p.id,'unsportsmanlike', -1)));
-  // 刪除
   box.appendChild(mkBtn('刪除',null, async ()=>{ await del('players', p.id); renderPlayers(); }));
-
-  op.appendChild(box);
-  tr.appendChild(op);
+  op.appendChild(box); tr.appendChild(op);
   return tr;
 }
 
@@ -187,24 +200,31 @@ async function renderPlayers(){
   for(const p of players){ tbody.appendChild(trForPlayer(p)); }
 }
 
-// 更新個人犯規（含團隊犯規規則判斷）
+// 上限提醒（彈窗一次）
+async function maybeAlertLimits(rec){
+  const {overPF,overT,overU} = needsFlag(rec);
+  let changed=false, msgs=[];
+  if(overPF && !rec.alertedPF){ rec.alertedPF=true; changed=true; msgs.push(`【提醒】${sideLabel(rec.team)} #${rec.number} 個人犯滿（≥${state.rules.limitPF}）。`); }
+  if(overT && !rec.alertedT){ rec.alertedT=true; changed=true; msgs.push(`【退場條件】${sideLabel(rec.team)} #${rec.number} 技術犯規達上限（${state.rules.limitT}）。`); }
+  if(overU && !rec.alertedU){ rec.alertedU=true; changed=true; msgs.push(`【退場條件】${sideLabel(rec.team)} #${rec.number} 違體犯規達上限（${state.rules.limitU}）。`); }
+  if(changed){ await put('players', rec); alert(msgs.join('\n')); }
+}
+const sideLabel = (t)=> t==='home'?'主隊':'客隊';
+
+// 更新個人犯規（含團隊犯規規則判斷 + 上限提醒）
 async function updatePersonalFoul(playerId, type, delta){
   const rec = await get('players', playerId);
   if(!rec) return;
   ensurePlayerShape(rec);
 
-  // 個人分項
+  // 分項
   if(type==='common'){ rec.PF = Math.max(0,(rec.PF|0)+delta); }
   else if(type==='offensive'){ rec.PFOFF = Math.max(0,(rec.PFOFF|0)+delta); }
   else if(type==='technical'){ rec.PFT = Math.max(0,(rec.PFT|0)+delta); }
   else if(type==='unsportsmanlike'){ rec.PFU = Math.max(0,(rec.PFU|0)+delta); }
 
-  // 個人總 PF = 分項合計（保險重算）
-  rec.PF = Math.max(0,(rec.PF|0));
-  const sum = (rec.PFOFF|0) + (rec.PFT|0) + (rec.PFU|0) + (rec.PF|0);
-  // 上面 PF 已作為「一般」的欄位，因此個人總數另外做個顯示？
-  // 這裡維持原 PF 為「總」呈現：把 PF 改為四項合計
-  rec.PF = sum;
+  // 個人總 PF = 分項合計
+  rec.PF = Math.max(0,(rec.PFOFF|0)+(rec.PFT|0)+(rec.PFU|0)+(rec.PF|0));
 
   // 團隊犯規是否變動
   let countToTeam = false;
@@ -212,12 +232,10 @@ async function updatePersonalFoul(playerId, type, delta){
   if(type==='offensive' && state.rules.countOffensive) countToTeam = true;
   if(type==='technical' && state.rules.countTechnical) countToTeam = true;
   if(type==='unsportsmanlike' && state.rules.countUnsportsmanlike) countToTeam = true;
-
-  if(countToTeam){
-    addTeamFoul(rec.team, delta);
-  }
+  if(countToTeam){ addTeamFoul(rec.team, delta); }
 
   await put('players', rec);
+  await maybeAlertLimits(rec);
   renderPlayers();
 }
 
@@ -234,11 +252,7 @@ document.querySelectorAll('.tab').forEach(btn=>{
 
 // ====== Shot Clock（>8s：整秒；≤8s：兩位小數） ======
 let shotTimer = null, lastShownWhole = null;
-function fmtShot(ms){
-  const s = Math.max(0, ms)/1000;
-  if(s > 8) return String(Math.ceil(s|0));
-  return s.toFixed(2);
-}
+function fmtShot(ms){ const s=Math.max(0,ms)/1000; return s>8?String(Math.ceil(s|0)):s.toFixed(2); }
 function updateShotUI(force=false){
   const d = document.getElementById('shotDisplay');
   const pos = document.getElementById('shotPos');
@@ -247,7 +261,7 @@ function updateShotUI(force=false){
   d.classList.toggle('shot-danger', s<=8);
   if(s>8 && !force){
     const whole = Math.ceil(s);
-    if(whole===lastShownWhole) { pos.textContent = `球權：${state.shot.poss==='home'?'主隊':'客隊'}${state.shot.running?'（計時中）':''}`; return; }
+    if(whole===lastShownWhole){ pos.textContent=`球權：${state.shot.poss==='home'?'主隊':'客隊'}${state.shot.running?'（計時中）':''}`; return; }
     lastShownWhole = whole;
   }
   d.textContent = fmtShot(state.shot.ms);
@@ -293,120 +307,59 @@ function startShot(){
   shotTimer = setInterval(tick, shotTickInterval);
   updateShotUI(true);
 }
-function pauseShot(){
-  if(shotTimer){ clearInterval(shotTimer); shotTimer=null; }
-  state.shot.running=false; state.shot.lastTs=null;
-  updateShotUI(true);
-}
+function pauseShot(){ if(shotTimer){ clearInterval(shotTimer); shotTimer=null; } state.shot.running=false; state.shot.lastTs=null; updateShotUI(true); }
 function resetShot(ms, {autoRunIfLinked=false}={}){
-  state.shot.ms = ms;
-  state.shot.lastTs = performance.now();
-  lastShownWhole = null;
-  updateShotUI(true);
+  state.shot.ms = ms; state.shot.lastTs = performance.now(); lastShownWhole=null; updateShotUI(true);
   if(state.shot.running){ clearInterval(shotTimer); startShot(); }
-  if(autoRunIfLinked && state.game.linkShot && state.game.running && !state.shot.running){
-    startShot();
-  }
+  if(autoRunIfLinked && state.game.linkShot && state.game.running && !state.shot.running){ startShot(); }
 }
-function swapPossession(){
-  state.shot.poss = (state.shot.poss==='home'?'away':'home');
-  updateShotUI(true);
-}
+function swapPossession(){ state.shot.poss = (state.shot.poss==='home'?'away':'home'); updateShotUI(true); }
 async function shotViolationAuto(){
   const team = state.shot.poss;
   const notes = document.getElementById('notes');
   if(notes) notes.value += (notes.value?'\r\n':'') + `【${new Date().toLocaleTimeString()}】${team==='home'?'主隊':'客隊'} 24秒違例`;
-  swapPossession();
-  resetShot(24000, {autoRunIfLinked:true});
-  await saveState();
+  swapPossession(); resetShot(24000,{autoRunIfLinked:true}); await saveState();
 }
 async function shotViolationManual(){ pauseShot(); buzzer(); await shotViolationAuto(); }
 
 // ====== Game Clock ======
 let gameTimer = null, gameLastShownSec = null;
 function fmtGame(ms){
-  const t = Math.max(0, ms|0);
-  const s = Math.floor(t/1000);
-  const m = Math.floor(s/60);
-  const sec = s%60;
-  if(s >= 60){
-    return `${String(m).padStart(1,'0')}:${String(sec).padStart(2,'0')}`;
-  }else{
-    const hundred = Math.floor((t%1000)/10);
-    return `${String(m).padStart(1,'0')}:${String(sec).padStart(2,'0')}.${String(hundred).padStart(2,'0')}`;
-  }
+  const t = Math.max(0, ms|0), s = Math.floor(t/1000), m = Math.floor(s/60), sec = s%60;
+  if(s>=60) return `${String(m).padStart(1,'0')}:${String(sec).padStart(2,'0')}`;
+  const hundred = Math.floor((t%1000)/10);
+  return `${String(m).padStart(1,'0')}:${String(sec).padStart(2,'0')}.${String(hundred).padStart(2,'0')}`;
 }
 function updateGameUI(force=false){
-  const d = document.getElementById('gameDisplay');
-  const info = document.getElementById('gameInfo');
-  if(!d || !info) return;
+  const d=$('#gameDisplay'), info=$('#gameInfo'); if(!d||!info) return;
   const s = Math.floor(state.game.ms/1000);
   d.classList.toggle('game-danger', s<60);
-  if(s>=60 && !force){
-    if(s===gameLastShownSec){ info.textContent = `長度：${fmtGame(state.game.totalMs)}`; return; }
-    gameLastShownSec = s;
-  }
+  if(s>=60 && !force){ if(s===gameLastShownSec){ info.textContent = `長度：${fmtGame(state.game.totalMs)}`; return; } gameLastShownSec=s; }
   d.textContent = fmtGame(state.game.ms);
   info.textContent = `長度：${fmtGame(state.game.totalMs)}`;
-  const linkBtn = document.getElementById('toggleLink');
-  if(linkBtn) linkBtn.textContent = `與 24s 連動：${state.game.linkShot?'開':'關'}`;
+  const linkBtn = $('#toggleLink'); if(linkBtn) linkBtn.textContent = `與 24s 連動：${state.game.linkShot?'開':'關'}`;
   saveState();
 }
 function startGame(){
   if(gameTimer) clearInterval(gameTimer);
-  state.game.running = true;
-  state.game.lastTs = performance.now();
+  state.game.running=true; state.game.lastTs=performance.now();
   if(state.game.linkShot && !state.shot.running) startShot();
-  const tick = ()=>{
-    const now = performance.now();
-    const elapsed = now - state.game.lastTs;
-    state.game.lastTs = now;
-    state.game.ms -= elapsed;
-    if(state.game.ms <= 0){
-      state.game.ms = 0;
-      updateGameUI(true);
-      clearInterval(gameTimer); gameTimer=null;
-      state.game.running=false;
-      buzzer();
-      nextPeriod();
-    }else{
-      updateGameUI();
-    }
+  const tick=()=>{
+    const now=performance.now(), elapsed=now-state.game.lastTs;
+    state.game.lastTs=now; state.game.ms-=elapsed;
+    if(state.game.ms<=0){ state.game.ms=0; updateGameUI(true); clearInterval(gameTimer); gameTimer=null; state.game.running=false; buzzer(); nextPeriod(); }
+    else{ updateGameUI(); }
   };
-  gameTimer = setInterval(tick, (state.game.ms>=60*1000)? 250 : 50);
-  updateGameUI(true);
+  gameTimer=setInterval(tick,(state.game.ms>=60*1000)?250:50); updateGameUI(true);
 }
-function pauseGame(){
-  if(gameTimer){ clearInterval(gameTimer); gameTimer=null; }
-  state.game.running=false; state.game.lastTs=null;
-  if(state.game.linkShot && state.shot.running) pauseShot();
-  updateGameUI(true);
-}
-function setGameLength(mins){
-  const ms = mins*60*1000;
-  state.game.totalMs = ms;
-  state.game.ms = ms;
-  gameLastShownSec = null;
-  updateGameUI(true);
-  if(state.game.running){ clearInterval(gameTimer); startGame(); }
-}
-function resetGameClock(){
-  state.game.ms = state.game.totalMs;
-  gameLastShownSec = null;
-  updateGameUI(true);
-}
+function pauseGame(){ if(gameTimer){ clearInterval(gameTimer); gameTimer=null; } state.game.running=false; state.game.lastTs=null; if(state.game.linkShot && state.shot.running) pauseShot(); updateGameUI(true); }
+function setGameLength(mins){ const ms=mins*60*1000; state.game.totalMs=ms; state.game.ms=ms; gameLastShownSec=null; updateGameUI(true); if(state.game.running){ clearInterval(gameTimer); startGame(); } }
+function resetGameClock(){ state.game.ms=state.game.totalMs; gameLastShownSec=null; updateGameUI(true); }
 function nextPeriod(){
   state.period += 1;
-  if(state.period <= 4){
-    resetGameClock();
-  }else{
-    state.game.totalMs = 5*60*1000; // OT 統一 5:00
-    resetGameClock();
-  }
-  resetTeamFouls();
-  resetShot(24000, {autoRunIfLinked:true});
-  renderPeriod();
-  saveState();
+  if(state.period<=4){ resetGameClock(); }
+  else{ state.game.totalMs = 5*60*1000; resetGameClock(); }
+  resetTeamFouls(); resetShot(24000,{autoRunIfLinked:true}); renderPeriod(); saveState();
 }
 
 // ====== TXT 匯出（UTF-8 BOM + CRLF） ======
@@ -425,11 +378,8 @@ function buildTxt(players){
   L.push('Team,Number,Name,Pos,PTS,PF_Total,PF_Off,PF_Tech,PF_Unspt,AST,REB,STL,BLK,TOV');
   players.sort((a,b)=> (a.team===b.team?0:(a.team==='home'?-1:1)) || (a.number-b.number))
     .forEach(p=>{
-      const row = [
-        p.team, p.number, p.name, p.pos,
-        p.PTS|0, (p.PF|0), (p.PFOFF|0), (p.PFT|0), (p.PFU|0),
-        p.AST|0, p.REB|0, p.STL|0, p.BLK|0, p.TOV|0
-      ];
+      p=ensurePlayerShape(p);
+      const row=[p.team,p.number,p.name,p.pos,p.PTS|0,(p.PF|0),(p.PFOFF|0),(p.PFT|0),(p.PFU|0),p.AST|0,p.REB|0,p.STL|0,p.BLK|0,p.TOV|0];
       L.push(row.join(','));
     });
   const notes = (document.getElementById('notes')?.value||'').trim();
@@ -437,31 +387,20 @@ function buildTxt(players){
   return L.join('\r\n');
 }
 async function getSavedHandle(){ const rec = await get('file','txtHandle'); return rec?.handle || null; }
-async function setSavedHandle(handle){
-  try{ if (handle && handle.requestPermission) await handle.requestPermission({mode:'readwrite'});}catch(e){}
-  await put('file',{k:'txtHandle', handle});
-}
+async function setSavedHandle(handle){ try{ if(handle?.requestPermission) await handle.requestPermission({mode:'readwrite'});}catch(e){} await put('file',{k:'txtHandle', handle}); }
 async function saveAsTxt(){
-  const players = (await allPlayers()).map(ensurePlayerShape);
+  const players = await allPlayers();
   const txt = buildTxt(players);
   const bom = '\ufeff';
   if(window.showSaveFilePicker){
-    const handle = await window.showSaveFilePicker({
-      suggestedName: (state.gameTitle||'game') + '.txt',
-      types: [{ description: 'Text', accept: {'text/plain':['.txt']} }]
-    });
-    const writable = await handle.createWritable();
-    await writable.write(bom + txt);
-    await writable.close();
-    await setSavedHandle(handle);
+    const handle = await window.showSaveFilePicker({ suggestedName:(state.gameTitle||'game')+'.txt', types:[{description:'Text',accept:{'text/plain':['.txt']}}] });
+    const w = await handle.createWritable(); await w.write(bom+txt); await w.close(); await setSavedHandle(handle);
     alert('已匯出 TXT 並記住檔案位置。之後可用「更新」覆寫。');
   }else{
     const blob = new Blob([bom, txt], {type:'text/plain;charset=utf-8'});
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
     a.download = (state.gameTitle||'game') + '-' + new Date().toISOString().replaceAll(':','').slice(0,15)+'.txt';
-    a.click();
-    URL.revokeObjectURL(a.href);
+    a.click(); URL.revokeObjectURL(a.href);
     alert('瀏覽器不支援覆寫同檔，已下載新檔（含 UTF-8 BOM）。');
   }
 }
@@ -469,16 +408,68 @@ async function updateTxt(){
   const handle = await getSavedHandle();
   if(!handle){ await saveAsTxt(); return; }
   try{
-    const players = (await allPlayers()).map(ensurePlayerShape);
+    const players = await allPlayers();
     const txt = buildTxt(players);
-    const writable = await handle.createWritable();
-    await writable.write('\ufeff' + txt);
-    await writable.close();
+    const w = await handle.createWritable(); await w.write('\ufeff'+txt); await w.close();
     alert('已更新並覆寫原檔。');
-  }catch(err){
-    console.warn(err);
-    await saveAsTxt();
-  }
+  }catch(err){ console.warn(err); await saveAsTxt(); }
+}
+
+// ====== 事件面板邏輯 ======
+function getEvtTarget(){
+  const team = $('#evtTeam')?.value || 'home';
+  const num  = parseInt($('#evtNum')?.value||'0',10);
+  if(!num){ alert('請先輸入背號'); return null; }
+  return {team,num,id:idOf(team,num)};
+}
+async function appendNote(text){
+  const notes = $('#notes'); if(notes){ notes.value += (notes.value?'\r\n':'') + `【${new Date().toLocaleTimeString()}】` + text; }
+  await saveState();
+}
+async function eventAddFoul(playerId, type, note){
+  await updatePersonalFoul(playerId, type, +1);
+  await appendNote(note);
+}
+function sideOpp(side){ return side==='home'?'away':'home'; }
+
+function bindEventPanel(){
+  const defCommon = $('#evDefCommon');
+  if(defCommon) defCommon.onclick = async ()=>{
+    const tgt = getEvtTarget(); if(!tgt) return;
+    await eventAddFoul(tgt.id,'common', `${sideLabel(tgt.team)} #${tgt.num} 防守犯規 → ${sideLabel(sideOpp(tgt.team))} 兩罰`);
+  };
+  const offensive = $('#evOffensive');
+  if(offensive) offensive.onclick = async ()=>{
+    const tgt = getEvtTarget(); if(!tgt) return;
+    await eventAddFoul(tgt.id,'offensive', `${sideLabel(tgt.team)} #${tgt.num} 進攻犯規（控球犯規）`);
+    // 常見處理：換球權，重置24
+    swapPossession(); resetShot(24000,{autoRunIfLinked:true});
+  };
+  const shoot2 = $('#evShoot2');
+  if(shoot2) shoot2.onclick = async ()=>{
+    const tgt = getEvtTarget(); if(!tgt) return;
+    await eventAddFoul(tgt.id,'common', `${sideLabel(tgt.team)} #${tgt.num} 投籃犯規（2罰）`);
+  };
+  const shoot3 = $('#evShoot3');
+  if(shoot3) shoot3.onclick = async ()=>{
+    const tgt = getEvtTarget(); if(!tgt) return;
+    await eventAddFoul(tgt.id,'common', `${sideLabel(tgt.team)} #${tgt.num} 投籃犯規（3罰）`);
+  };
+  const and1 = $('#evAnd1');
+  if(and1) and1.onclick = async ()=>{
+    const tgt = getEvtTarget(); if(!tgt) return;
+    await eventAddFoul(tgt.id,'common', `${sideLabel(tgt.team)} #${tgt.num} And-1（投籃成球外加一罰）`);
+  };
+  const tech = $('#evTechnical');
+  if(tech) tech.onclick = async ()=>{
+    const tgt = getEvtTarget(); if(!tgt) return;
+    await eventAddFoul(tgt.id,'technical', `${sideLabel(tgt.team)} #${tgt.num} 技術犯規`);
+  };
+  const uns = $('#evUnsports');
+  if(uns) uns.onclick = async ()=>{
+    const tgt = getEvtTarget(); if(!tgt) return;
+    await eventAddFoul(tgt.id,'unsportsmanlike', `${sideLabel(tgt.team)} #${tgt.num} 違體犯規`);
+  };
 }
 
 // ====== 綁定事件 ======
@@ -516,25 +507,25 @@ function bindEvents(){
   const gt=$('#gameTitle'); if(gt) gt.addEventListener('input', e=>{ state.gameTitle = e.target.value; saveState(); });
 
   // Shot
-  const ss=$('#shotStart'); if(ss) ss.onclick = ()=> startShot();
-  const sp=$('#shotPause'); if(sp) sp.onclick = ()=> pauseShot();
-  const sr24=$('#shotReset24'); if(sr24) sr24.onclick = ()=> resetShot(24000,{autoRunIfLinked:true});
-  const sr14=$('#shotReset14'); if(sr14) sr14.onclick = ()=> resetShot(14000,{autoRunIfLinked:true});
-  const sm=$('#shotMinus'); if(sm) sm.onclick = ()=>{ state.shot.ms=Math.max(0,state.shot.ms-1000); updateShotUI(true); if(state.shot.running){ clearInterval(shotTimer); startShot();} };
-  const spm=$('#shotPlus'); if(spm) spm.onclick = ()=>{ state.shot.ms=Math.min(24000,state.shot.ms+1000); updateShotUI(true); if(state.shot.running){ clearInterval(shotTimer); startShot();} };
-  const sswap=$('#shotSwap'); if(sswap) sswap.onclick = ()=>{ swapPossession(); if(state.game.linkShot && state.game.running) startShot(); };
-  const svi=$('#shotViolation'); if(svi) svi.onclick = ()=> shotViolationManual();
-  const qa14=$('#qaOffReb14'); if(qa14) qa14.onclick = ()=> resetShot(14000,{autoRunIfLinked:true});
-  const qa24=$('#qaChangePoss24'); if(qa24) qa24.onclick = ()=>{ swapPossession(); resetShot(24000,{autoRunIfLinked:true}); };
+  $('#shotStart')?.addEventListener('click', ()=> startShot());
+  $('#shotPause')?.addEventListener('click', ()=> pauseShot());
+  $('#shotReset24')?.addEventListener('click', ()=> resetShot(24000,{autoRunIfLinked:true}));
+  $('#shotReset14')?.addEventListener('click', ()=> resetShot(14000,{autoRunIfLinked:true}));
+  $('#shotMinus')?.addEventListener('click', ()=>{ state.shot.ms=Math.max(0,state.shot.ms-1000); updateShotUI(true); if(state.shot.running){ clearInterval(shotTimer); startShot();} });
+  $('#shotPlus')?.addEventListener('click', ()=>{ state.shot.ms=Math.min(24000,state.shot.ms+1000); updateShotUI(true); if(state.shot.running){ clearInterval(shotTimer); startShot();} });
+  $('#shotSwap')?.addEventListener('click', ()=>{ swapPossession(); if(state.game.linkShot && state.game.running) startShot(); });
+  $('#shotViolation')?.addEventListener('click', ()=> shotViolationManual());
+  $('#qaOffReb14')?.addEventListener('click', ()=> resetShot(14000,{autoRunIfLinked:true}));
+  $('#qaChangePoss24')?.addEventListener('click', ()=>{ swapPossession(); resetShot(24000,{autoRunIfLinked:true}); });
 
   // Game
-  const gs=$('#gameStart'); if(gs) gs.onclick = ()=> startGame();
-  const gp=$('#gamePause'); if(gp) gp.onclick = ()=> pauseGame();
-  const gr=$('#gameReset'); if(gr) gr.onclick = ()=> resetGameClock();
-  const s12=$('#set12'); if(s12) s12.onclick = ()=> setGameLength(12);
-  const s10=$('#set10'); if(s10) s10.onclick = ()=> setGameLength(10);
-  const s5=$('#set5'); if(s5) s5.onclick  = ()=> setGameLength(5);
-  const tl=$('#toggleLink'); if(tl) tl.onclick = ()=>{ state.game.linkShot = !state.game.linkShot; updateGameUI(true); };
+  $('#gameStart')?.addEventListener('click', ()=> startGame());
+  $('#gamePause')?.addEventListener('click', ()=> pauseGame());
+  $('#gameReset')?.addEventListener('click', ()=> resetGameClock());
+  $('#set12')?.addEventListener('click', ()=> setGameLength(12));
+  $('#set10')?.addEventListener('click', ()=> setGameLength(10));
+  $('#set5')?.addEventListener('click',  ()=> setGameLength(5));
+  $('#toggleLink')?.addEventListener('click', ()=>{ state.game.linkShot = !state.game.linkShot; updateGameUI(true); });
 
   // 規則設定
   const syncRulesFromUI = ()=>{
@@ -542,27 +533,34 @@ function bindEvents(){
     state.rules.countOffensive = $('#ruleCountOffensive').checked;
     state.rules.countTechnical = $('#ruleCountTechnical').checked;
     state.rules.countUnsportsmanlike = $('#ruleCountUnsportsmanlike').checked;
-    saveState();
+    state.rules.limitPF = Math.max(1,parseInt($('#limitPF').value||'5',10));
+    state.rules.limitT  = Math.max(1,parseInt($('#limitT').value||'2',10));
+    state.rules.limitU  = Math.max(1,parseInt($('#limitU').value||'2',10));
+    saveState(); renderPlayers();
   };
-  ['ruleCountCommon','ruleCountOffensive','ruleCountTechnical','ruleCountUnsportsmanlike'].forEach(id=>{
+  ['ruleCountCommon','ruleCountOffensive','ruleCountTechnical','ruleCountUnsportsmanlike','limitPF','limitT','limitU'].forEach(id=>{
     const el = document.getElementById(id); if(el) el.addEventListener('change', syncRulesFromUI);
   });
-  const pfiba=$('#presetFIBA'); if(pfiba) pfiba.onclick = ()=>{
-    // 常見解讀：一般/違體 計入；進攻/技術 不計入
+  $('#presetFIBA')?.addEventListener('click', ()=>{
     $('#ruleCountCommon').checked = true;
     $('#ruleCountOffensive').checked = false;
     $('#ruleCountTechnical').checked = false;
     $('#ruleCountUnsportsmanlike').checked = true;
+    $('#limitPF').value = 5; $('#limitT').value = 2; $('#limitU').value = 2; 
     syncRulesFromUI();
-  };
-  const pnba=$('#presetNBA'); if(pnba) pnba.onclick = ()=>{
-    // 可依需要再調整；先與上方一致，避免誤導
+  });
+  $('#presetNBA')?.addEventListener('click', ()=>{
+    // 這裡同樣設為常見實務：PF=6 也有人用 6；若你要 6 請改這裡或 UI 上改
     $('#ruleCountCommon').checked = true;
     $('#ruleCountOffensive').checked = false;
     $('#ruleCountTechnical').checked = false;
     $('#ruleCountUnsportsmanlike').checked = true;
+    $('#limitPF').value = 6; $('#limitT').value = 2; $('#limitU').value = 2;
     syncRulesFromUI();
-  };
+  });
+
+  // 事件面板
+  bindEventPanel();
 }
 
 // ====== 啟動 ======
