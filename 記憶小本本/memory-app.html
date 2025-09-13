@@ -46,6 +46,8 @@
   <h1>📝 記憶小本本</h1>
   <div class="bar">
     <input id="search" type="search" placeholder="搜尋項目或備註…">
+    <!-- 原來的安裝/匯出/匯入附近，加上一顆 -->
+    <button id="copyBackupBtn" class="btn">備份（複製）</button>
     <button id="exportBtn" class="btn">匯出</button>
     <button id="importBtn" class="btn">匯入</button>
     <button id="installBtn" class="btn" style="display:none;">安裝</button>
@@ -289,45 +291,54 @@ $('#manageStaplesBtn').addEventListener('click', ()=>{
 searchEl.addEventListener('input', render);
 
 /** 匯出 / 匯入（JSON） **/
-// 取代原本的 export 監聽器
+// 取代 #exportBtn 的監聽器（完整貼上）
 $('#exportBtn').addEventListener('click', async ()=>{
   const payload = { items, staples };
   const text = JSON.stringify(payload, null, 2);
+  const bytes = new TextEncoder().encode(text);
+  const blob  = new Blob([bytes], { type: 'application/json;charset=utf-8' });
+  const file  = new File([blob], 'memory-data.json', { type: 'application/json' });
 
-  try {
-    // 1) 優先用 Web Share (iOS 可直接叫出「存到檔案」)
-    const bytes = new TextEncoder().encode(text);
-    const blob  = new Blob([bytes], { type: 'application/json;charset=utf-8' });
-    const file  = new File([blob], 'memory-data.json', { type: 'application/json' });
-
+  // 1) 先試 iOS 分享（能直接「存到檔案」）
+  try{
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({
         files: [file],
         title: '記憶小本本備份',
-        text: 'memory-data.json（可用「檔案」App 儲存 / 傳到雲端）'
+        text: 'memory-data.json（在分享單選「存到檔案」）'
       });
-      return; // 分享成功就結束
+      return;
     }
+  }catch(e){ /* 忽略，走備援 */ }
 
-    // 2) 若無法 share，嘗試下載（Safari 會出現 Download / View）
+  // 2) 分享不行 → 直接另開新分頁（正確 UTF-8），再用分享→存到檔案
+  try{
+    const dataUrl = 'data:application/json;charset=utf-8,' + encodeURIComponent(text);
+    window.open(dataUrl, '_blank');
+    return;
+  }catch(e){ /* 忽略，走最終備援 */ }
+
+  // 3) 最後備援：下載 + 可複製文字框
+  try{
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = 'memory-data.json';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    a.href = url; a.download = 'memory-data.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }catch(_){}
+  prompt('複製以下內容並存成 memory-data.json：', text);
+});
 
-    // 3) 部分 PWA/瀏覽器會忽略下載 → 0.4s 後用 data:URL 另開（正確 UTF-8）
-    setTimeout(()=>{
-      const dataUrl = 'data:application/json;charset=utf-8,' + encodeURIComponent(text);
-      window.open(dataUrl, '_blank');
-      URL.revokeObjectURL(url);
-    }, 400);
-
-  } catch (e) {
-    // 4) 最後保險：彈出可複製的文字
-    prompt('複製以下內容並存成 memory-data.json：', text);
+// 新增「備份（複製）」：一鍵寫入剪貼簿 + 顯示視窗
+$('#copyBackupBtn').addEventListener('click', async ()=>{
+  const payload = { items, staples };
+  const text = JSON.stringify(payload, null, 2);
+  try{
+    await navigator.clipboard.writeText(text);
+    alert('已複製到剪貼簿！請開「檔案 App → 新增文字檔」，貼上後存成 memory-data.json。');
+  }catch(e){
+    // 某些 iOS 需使用者手動複製
+    prompt('無法自動複製，請手動全選複製：', text);
   }
 });
 
