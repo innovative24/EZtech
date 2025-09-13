@@ -3,53 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>籃球計分板（IndexedDB + TXT + 24/14s + OT + Team/Personal Fouls + Game Clock）</title>
-  <style>
-    :root { --bg:#0f172a; --card:#111827; --muted:#9ca3af; --accent:#22c55e; --danger:#ef4444; --fg:#e5e7eb; --line:#1f2937; --warn:#f59e0b; }
-    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto}
-    header{position:sticky;top:0;background:rgba(15,23,42,.85);backdrop-filter:saturate(180%) blur(10px);border-bottom:1px solid var(--line);z-index:10}
-    .container{max-width:1200px;margin:0 auto;padding:16px}
-    h1{margin:0;font-size:20px}
-    .grid{display:grid;gap:16px}
-    @media (min-width:1000px){ .grid-3{grid-template-columns:1.1fr 1.1fr 0.9fr} .grid-2{grid-template-columns:1fr 1fr} }
-    .card{background:linear-gradient(180deg,#0b1224,#0b1224) padding-box, radial-gradient(120% 120% at 100% 0%, #1e293b, transparent 40%) border-box;border:1px solid var(--line);border-radius:14px;padding:16px}
-    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    .score{font-size:44px;font-weight:800;letter-spacing:1px}
-    .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
-    button,.btn{appearance:none;border:1px solid var(--line);background:#0b1224;color:var(--fg);padding:10px 14px;border-radius:10px;cursor:pointer}
-    button:hover{border-color:#334155}
-    .btn-accent{background:var(--accent);border-color:transparent;color:#04120a}
-    .btn-danger{background:var(--danger);border-color:transparent;color:#fff}
-    .btn-warn{background:var(--warn);border-color:transparent;color:#04120a}
-    input,select,textarea{background:#0b1224;border:1px solid var(--line);color:var(--fg);padding:10px;border-radius:10px;width:100%}
-    table{width:100%;border-collapse:collapse}
-    th,td{border-bottom:1px solid var(--line);padding:8px;text-align:left}
-    th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
-    .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
-    .chip{font-size:12px;color:#a7f3d0;background:#064e3b;padding:3px 8px;border-radius:9999px;border:1px solid #0f766e}
-    .muted{color:var(--muted)}
-    /* Shot clock */
-    .shot-face{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:8px 0}
-    .shot-display{font:900 64px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:1px}
-    .shot-danger{color:#fecaca}
-    /* Game clock */
-    .game-face{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:8px 0}
-    .game-display{font:900 56px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:1px}
-    .game-danger{color:#fde68a}
-    /* Tabs */
-    .tabs{display:flex;gap:8px}
-    .tab{padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:#0b1224;cursor:pointer}
-    .tab.active{background:#1f2937}
-    .view{display:none}
-    .view.active{display:block}
-    .bonus{padding:2px 8px;border-radius:999px;background:#451a03;color:#ffedd5;border:1px solid #78350f;font-size:12px}
-    .foul-count{font:700 24px/1 ui-monospace,Menlo,Consolas,monospace}
-    .opbtn{font-size:12px;padding:4px 8px;border-radius:8px}
-  </style>
+  <title>籃球計分板</title>
+  <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
   <header>
-    <div class="container row" style="justify-content:space-between">
+    <div class="container row space-between">
       <h1>🏀 籃球計分板</h1>
       <div class="row">
         <button id="btnExport" class="btn">匯出 TXT</button>
@@ -57,7 +16,7 @@
         <button id="btnReset" class="btn-danger">清空本場</button>
       </div>
     </div>
-    <div class="container" style="padding-top:0">
+    <div class="container tabs-wrap">
       <div class="tabs">
         <button class="tab active" data-view="scoreView">計分板</button>
         <button class="tab" data-view="playersView">球員索引</button>
@@ -65,13 +24,13 @@
     </div>
   </header>
 
-  <main class="container" style="margin-top:12px">
+  <main class="container main">
     <!-- 計分板 View -->
     <div id="scoreView" class="view active">
       <div class="grid grid-3">
         <!-- Scoreboard + Team Fouls -->
         <section class="card">
-          <div class="row" style="justify-content:space-between">
+          <div class="row space-between">
             <div>
               <div class="label">主隊</div>
               <div class="score" id="homeScore">0</div>
@@ -81,7 +40,7 @@
                 <button data-add="home:3">+3</button>
                 <button data-add="home:-1">-1</button>
               </div>
-              <div class="row" style="margin-top:8px;align-items:center">
+              <div class="row mt8 center">
                 <span class="label">團隊犯規</span>
                 <span id="homeFouls" class="foul-count">0</span>
                 <span id="homeBonus" class="bonus" style="display:none">Bonus</span>
@@ -102,7 +61,7 @@
                 <button data-add="away:3">+3</button>
                 <button data-add="away:-1">-1</button>
               </div>
-              <div class="row" style="margin-top:8px;align-items:center">
+              <div class="row mt8 center">
                 <span class="label">團隊犯規</span>
                 <span id="awayFouls" class="foul-count">0</span>
                 <span id="awayBonus" class="bonus" style="display:none">Bonus</span>
@@ -115,18 +74,18 @@
             </div>
           </div>
 
-          <hr style="border:0;border-top:1px solid var(--line);margin:16px 0" />
+          <hr class="divider" />
           <div class="grid grid-2">
             <div class="row">
-              <div style="flex:1">
+              <div class="flex1">
                 <div class="label">節次</div>
                 <div class="row">
                   <button id="periodDec">-</button>
-                  <div id="period" class="score" style="font-size:28px">第1節</div>
+                  <div id="period" class="score small">第1節</div>
                   <button id="periodInc">+</button>
                 </div>
               </div>
-              <div style="flex:1">
+              <div class="flex1">
                 <div class="label">比賽資訊</div>
                 <input id="gameTitle" placeholder="比賽名稱（例：聯賽A：主隊 vs 客隊）" />
               </div>
@@ -136,7 +95,7 @@
 
         <!-- Game Clock -->
         <section class="card">
-          <div class="row" style="justify-content:space-between">
+          <div class="row space-between">
             <div class="label">比賽計時（Game Clock）</div>
             <span class="chip">OT 自動 5:00；到 0 自動下一節</span>
           </div>
@@ -144,7 +103,7 @@
             <div id="gameDisplay" class="game-display">12:00</div>
             <div id="gameInfo" class="muted">長度：12:00</div>
           </div>
-          <div class="row" style="justify-content:center">
+          <div class="row center">
             <button id="gameStart" class="btn-accent">開始</button>
             <button id="gamePause">暫停</button>
             <button id="gameReset">重置本節</button>
@@ -155,9 +114,9 @@
           </div>
         </section>
 
-        <!-- Shot Clock & Quick actions -->
+        <!-- Shot Clock -->
         <section class="card">
-          <div class="row" style="justify-content:space-between">
+          <div class="row space-between">
             <div class="label">進攻時計（24s / 14s）</div>
             <span class="chip">≤8 秒顯示到 0.01；到 0 自動違例</span>
           </div>
@@ -165,7 +124,7 @@
             <div id="shotDisplay" class="shot-display">24</div>
             <div id="shotPos" class="muted">球權：主隊</div>
           </div>
-          <div class="row" style="justify-content:center">
+          <div class="row center">
             <button id="shotStart" class="btn-accent">開始</button>
             <button id="shotPause">暫停</button>
             <button id="shotReset24">重置 24</button>
@@ -175,14 +134,14 @@
             <button id="shotSwap">切換球權</button>
             <button id="shotViolation" class="btn-danger">判 24 秒違例</button>
           </div>
-          <hr style="border:0;border-top:1px solid var(--line);margin:12px 0">
+          <hr class="divider">
           <div class="label">快速情境</div>
           <div class="row">
             <button id="qaOffReb14" title="進攻籃板後重置 14 秒">進攻籃板（14s）</button>
             <button id="qaChangePoss24" title="防守籃板或失誤等換球權重置 24 秒">換球權（24s）</button>
           </div>
 
-          <div class="label" style="margin-top:12px">備註（可寫入TXT）</div>
+          <div class="label mt12">備註（可寫入TXT）</div>
           <textarea id="notes" rows="6" placeholder="例：第三節 05:22 主隊 10:0 攻勢，#7 三分追平"></textarea>
         </section>
       </div>
@@ -191,11 +150,11 @@
     <!-- 球員索引 View -->
     <div id="playersView" class="view">
       <section class="card">
-        <div class="row" style="justify-content:space-between">
+        <div class="row space-between">
           <div class="label">球員索引 / 新增球員</div>
           <span class="chip">可直接點表格編輯；PF 會同步團隊犯規</span>
         </div>
-        <div class="grid grid-2" style="margin-top:8px">
+        <div class="grid grid-2 mt8">
           <input id="pNum" type="number" placeholder="背號（數字）"/>
           <input id="pName" placeholder="姓名"/>
           <select id="pTeam">
@@ -204,12 +163,12 @@
           </select>
           <input id="pPos" placeholder="位置（G/F/C）"/>
         </div>
-        <div class="row" style="margin-top:8px">
+        <div class="row mt8">
           <button id="addPlayer" class="btn-accent">加入名單</button>
           <span class="muted">重複背號會覆蓋該隊同背號。</span>
         </div>
 
-        <div style="margin-top:12px;max-height:460px;overflow:auto;border:1px solid var(--line);border-radius:10px">
+        <div class="table-wrap">
           <table id="playersTbl">
             <thead>
               <tr>
@@ -225,510 +184,6 @@
     </div>
   </main>
 
-  <script>
-  // --- IndexedDB 基礎 ---
-  const DB_NAME = 'basket-scoreboard';
-  const DB_VER  = 5; // 個人犯規控制 + 進攻時計兩位小數 + 自動續跑
-  let db;
-
-  function openDB(){
-    return new Promise((resolve,reject)=>{
-      const req = indexedDB.open(DB_NAME, DB_VER);
-      req.onupgradeneeded = (e)=>{
-        const db = e.target.result;
-        if(!db.objectStoreNames.contains('players')){
-          const s = db.createObjectStore('players',{ keyPath:'id' });
-          s.createIndex('team','team',{unique:false});
-        }
-        if(!db.objectStoreNames.contains('game')){
-          db.createObjectStore('game',{ keyPath:'k' });
-        }
-        if(!db.objectStoreNames.contains('file')){
-          db.createObjectStore('file',{ keyPath:'k' });
-        }
-      };
-      req.onsuccess = ()=>{ db=req.result; resolve(db); };
-      req.onerror = ()=>reject(req.error);
-    });
-  }
-  function tx(store,mode='readonly'){ return db.transaction(store,mode).objectStore(store); }
-  const put = (store,val)=>new Promise((res,rej)=>{ const r=tx(store,'readwrite').put(val); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); });
-  const get = (store,key)=>new Promise((res,rej)=>{ const r=tx(store).get(key); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); });
-  const del = (store,key)=>new Promise((res,rej)=>{ const r=tx(store,'readwrite').delete(key); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); });
-  const allPlayers = ()=>new Promise((res,rej)=>{ const r = tx('players').getAll(); r.onsuccess=()=>res(r.result||[]); r.onerror=()=>rej(r.error); });
-
-  // --- 常數 & 狀態 ---
-  const BONUS_LIMIT = 5; // 每節 5 犯進入加罰
-  const state = {
-    gameTitle:'',
-    period:1,
-    home:{score:0,timeouts:6,teamFouls:0},
-    away:{score:0,timeouts:6,teamFouls:0},
-    shot:{ ms:24000, running:false, lastTs:null, poss:'home' }, // 進攻時計
-    game:{ ms:12*60*1000, totalMs:12*60*1000, running:false, lastTs:null, linkShot:false }, // 比賽時計
-    ui:{ view:'scoreView' }
-  };
-
-  // --- 初始化/儲存 ---
-  async function loadState(){
-    const saved = await get('game','state');
-    if(saved){ Object.assign(state,saved.v); }
-    document.getElementById('gameTitle').value = state.gameTitle || '';
-    setScore('home', state.home.score);
-    setScore('away', state.away.score);
-    renderTeamFouls('home'); renderTeamFouls('away');
-    document.getElementById('homeTO').textContent = state.home.timeouts;
-    document.getElementById('awayTO').textContent = state.away.timeouts;
-    renderPeriod();
-    updateShotUI(true);
-    updateGameUI(true);
-    setView(state.ui.view || 'scoreView');
-    if(state.shot.running) startShot(true);
-    if(state.game.running) startGame(true);
-  }
-  async function saveState(){ await put('game',{k:'state', v:structuredClone(state)}); }
-
-  // --- 節次顯示（含 OT） ---
-  function periodLabel(n){ return n<=4 ? `第${n}節` : `OT${n-4}`; }
-  function renderPeriod(){ document.getElementById('period').textContent = periodLabel(state.period); }
-
-  // --- 比分區 ---
-  function setScore(side, val){
-    state[side].score = Math.max(0, val|0);
-    document.getElementById(side+'Score').textContent = state[side].score;
-    saveState();
-  }
-
-  // --- 團隊犯規 ---
-  function renderTeamFouls(side){
-    const n = Math.max(0, state[side].teamFouls|0);
-    document.getElementById(side+'Fouls').textContent = n;
-    const bonusEl = document.getElementById(side+'Bonus');
-    bonusEl.style.display = n >= BONUS_LIMIT ? 'inline-flex' : 'none';
-    saveState();
-  }
-  function addTeamFoul(side, delta){
-    state[side].teamFouls = Math.max(0, (state[side].teamFouls|0) + delta);
-    renderTeamFouls(side);
-  }
-  function resetTeamFouls(){
-    state.home.teamFouls = 0; state.away.teamFouls = 0;
-    renderTeamFouls('home'); renderTeamFouls('away');
-  }
-
-  // --- 球員表格（含個人犯規控制） ---
-  function idOf(team,num){ return `${team}#${num}`; }
-
-  function trForPlayer(p){
-    const tr = document.createElement('tr'); tr.dataset.id=p.id;
-    const cells = [
-      ['team', p.team==='home'?'主隊':'客隊', false],
-      ['number', p.number, true],
-      ['name', p.name||'', true],
-      ['pos', p.pos||'', true],
-      ['PTS', p.PTS|0, false],
-      ['PF',  p.PF|0,  false],
-      ['AST', p.AST|0, false],
-      ['REB', p.REB|0, false],
-      ['STL', p.STL|0, false],
-      ['BLK', p.BLK|0, false],
-      ['TOV', p.TOV|0, false],
-    ];
-    for(const [k,val,editable] of cells){
-      const td = document.createElement('td');
-      td.className = ['PTS','PF','AST','REB','STL','BLK','TOV'].includes(k)?'mono':'';
-      td.textContent = val;
-      if(editable){
-        td.contentEditable = true;
-        td.addEventListener('blur', async ()=>{
-          const storeVal = await get('players', p.id);
-          if(!storeVal) return;
-          if(k==='number'){
-            const newNum = parseInt(td.textContent||'0',10)||0;
-            if(newNum!==storeVal.number){
-              await del('players', storeVal.id);
-              storeVal.number = newNum;
-              storeVal.id = idOf(storeVal.team, newNum);
-            }
-          }else{
-            storeVal[k] = td.textContent.trim();
-          }
-          await put('players', storeVal);
-          renderPlayers();
-        });
-      }
-      tr.appendChild(td);
-    }
-    const op = document.createElement('td');
-    // 個人犯規控制（同步團隊犯規）
-    const pfPlus = document.createElement('button');
-    pfPlus.textContent = '+ 犯規'; pfPlus.className='opbtn btn-warn';
-    pfPlus.addEventListener('click', async ()=>{
-      const rec = await get('players', p.id); if(!rec) return;
-      rec.PF = (rec.PF|0)+1; await put('players', rec); addTeamFoul(rec.team, +1); renderPlayers();
-    });
-    const pfMinus = document.createElement('button');
-    pfMinus.textContent = '- 犯規'; pfMinus.className='opbtn';
-    pfMinus.addEventListener('click', async ()=>{
-      const rec = await get('players', p.id); if(!rec) return;
-      if((rec.PF|0)>0){ rec.PF = rec.PF-1; await put('players', rec); addTeamFoul(rec.team, -1); renderPlayers(); }
-    });
-    const delBtn = document.createElement('button');
-    delBtn.textContent='刪除'; delBtn.className='opbtn';
-    delBtn.addEventListener('click', async ()=>{ await del('players', p.id); renderPlayers(); });
-
-    op.appendChild(pfPlus); op.appendChild(pfMinus); op.appendChild(delBtn);
-    tr.appendChild(op);
-    return tr;
-  }
-
-  async function renderPlayers(){
-    const players = await allPlayers();
-    const tbody = document.querySelector('#playersTbl tbody');
-    if(!tbody) return;
-    tbody.innerHTML='';
-    players.sort((a,b)=> (a.team===b.team?0:(a.team==='home'?-1:1)) || (a.number-b.number));
-    for(const p of players){ tbody.appendChild(trForPlayer(p)); }
-  }
-
-  // --- Tabs ---
-  function setView(viewId){
-    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-    document.getElementById(viewId).classList.add('active');
-    document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.view===viewId));
-    state.ui.view = viewId; saveState();
-  }
-  document.querySelectorAll('.tab').forEach(btn=>{
-    btn.addEventListener('click', ()=> setView(btn.dataset.view));
-  });
-
-  // --- Shot Clock（>8s：整秒；≤8s：兩位小數） ---
-  let shotTimer = null, lastShownWhole = null;
-
-  function fmtShot(ms){
-    const s = Math.max(0, ms)/1000;
-    if(s > 8) return String(Math.ceil(s|0));
-    return s.toFixed(2); // 兩位小數
-  }
-  function updateShotUI(force=false){
-    const d = document.getElementById('shotDisplay');
-    const pos = document.getElementById('shotPos');
-    const s = state.shot.ms/1000;
-    d.classList.toggle('shot-danger', s<=8);
-    if(s>8 && !force){
-      const whole = Math.ceil(s);
-      if(whole===lastShownWhole) { pos.textContent = `球權：${state.shot.poss==='home'?'主隊':'客隊'}${state.shot.running?'（計時中）':''}`; return; }
-      lastShownWhole = whole;
-    }
-    d.textContent = fmtShot(state.shot.ms);
-    pos.textContent = `球權：${state.shot.poss==='home'?'主隊':'客隊'}${state.shot.running?'（計時中）':''}`;
-    saveState();
-  }
-  function buzzer(){
-    try{
-      const ctx = new (window.AudioContext||window.webkitAudioContext)();
-      const o = ctx.createOscillator(), g = ctx.createGain();
-      o.connect(g); g.connect(ctx.destination);
-      o.type='square'; o.frequency.value= 440;
-      g.gain.setValueAtTime(0.001, ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime+0.01);
-      o.start();
-      setTimeout(()=>{ g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+0.6); o.stop(ctx.currentTime+0.65); ctx.close(); }, 600);
-    }catch(e){}
-  }
-  function pickShotInterval(){ return (state.shot.ms/1000 > 8) ? 200 : 50; } // 8 秒內更密集
-
-  function startShot(resume=false){
-    if(shotTimer) clearInterval(shotTimer);
-    state.shot.running = true;
-    state.shot.lastTs = performance.now();
-    const tick = ()=>{
-      const now = performance.now();
-      const elapsed = now - state.shot.lastTs;
-      state.shot.lastTs = now;
-      state.shot.ms -= elapsed;
-      if(state.shot.ms <= 0){
-        state.shot.ms = 0;
-        updateShotUI(true);
-        clearInterval(shotTimer); shotTimer=null;
-        state.shot.running=false;
-        buzzer();
-        shotViolationAuto(); // 違例→換球權→自動續跑（若連動開且比賽在跑）
-      }else{
-        updateShotUI();
-        // 門檻跨越時調整 interval
-        const newInt = pickShotInterval();
-        if(newInt !== shotTickInterval){ clearInterval(shotTimer); shotTickInterval=newInt; shotTimer=setInterval(tick, shotTickInterval); }
-      }
-    };
-    let shotTickInterval = pickShotInterval();
-    shotTimer = setInterval(tick, shotTickInterval);
-    updateShotUI(true);
-  }
-  function pauseShot(){
-    if(shotTimer){ clearInterval(shotTimer); shotTimer=null; }
-    state.shot.running=false; state.shot.lastTs=null;
-    updateShotUI(true);
-  }
-  function resetShot(ms, {autoRunIfLinked=false}={}){
-    state.shot.ms = ms;
-    state.shot.lastTs = performance.now();
-    lastShownWhole = null;
-    updateShotUI(true);
-    if(state.shot.running){ clearInterval(shotTimer); startShot(true); }
-    // 若要求在「連動開＋比賽在跑」時自動續跑
-    if(autoRunIfLinked && state.game.linkShot && state.game.running && !state.shot.running){
-      startShot(true);
-    }
-  }
-  function swapPossession(){
-    state.shot.poss = (state.shot.poss==='home'?'away':'home');
-    updateShotUI(true);
-  }
-  async function shotViolationAuto(){
-    const team = state.shot.poss;
-    const notes = document.getElementById('notes');
-    notes.value += (notes.value?'\r\n':'') + `【${new Date().toLocaleTimeString()}】${team==='home'?'主隊':'客隊'} 24秒違例`;
-    swapPossession();
-    resetShot(24000, {autoRunIfLinked:true}); // 自動續跑（若連動開＋比賽在跑）
-    await saveState();
-  }
-  async function shotViolationManual(){ pauseShot(); buzzer(); await shotViolationAuto(); }
-
-  // --- Game Clock（比賽時計） ---
-  let gameTimer = null, gameLastShownSec = null;
-
-  function fmtGame(ms){
-    const t = Math.max(0, ms|0);
-    const s = Math.floor(t/1000);
-    const m = Math.floor(s/60);
-    const sec = s%60;
-    if(s >= 60){
-      return `${String(m).padStart(1,'0')}:${String(sec).padStart(2,'0')}`;
-    }else{
-      const hundred = Math.floor((t%1000)/10); // 兩位小數（百分之一秒）
-      return `${String(m).padStart(1,'0')}:${String(sec).padStart(2,'0')}.${String(hundred).padStart(2,'0')}`;
-    }
-  }
-  function updateGameUI(force=false){
-    const d = document.getElementById('gameDisplay');
-    const info = document.getElementById('gameInfo');
-    const s = Math.floor(state.game.ms/1000);
-    d.classList.toggle('game-danger', s<60);
-    if(s>=60 && !force){
-      if(s===gameLastShownSec){ info.textContent = `長度：${fmtGame(state.game.totalMs)}`; return; }
-      gameLastShownSec = s;
-    }
-    d.textContent = fmtGame(state.game.ms);
-    info.textContent = `長度：${fmtGame(state.game.totalMs)}`;
-    document.getElementById('toggleLink').textContent = `與 24s 連動：${state.game.linkShot?'開':'關'}`;
-    saveState();
-  }
-  function startGame(resume=false){
-    if(gameTimer) clearInterval(gameTimer);
-    state.game.running = true;
-    state.game.lastTs = performance.now();
-    if(state.game.linkShot && !state.shot.running) startShot(true); // 同步啟動 24s
-    const tick = ()=>{
-      const now = performance.now();
-      const elapsed = now - state.game.lastTs;
-      state.game.lastTs = now;
-      state.game.ms -= elapsed;
-      if(state.game.ms <= 0){
-        state.game.ms = 0;
-        updateGameUI(true);
-        clearInterval(gameTimer); gameTimer=null;
-        state.game.running=false;
-        buzzer();
-        nextPeriod();
-      }else{
-        updateGameUI();
-      }
-    };
-    gameTimer = setInterval(tick, (state.game.ms>=60*1000)? 250 : 50);
-    updateGameUI(true);
-  }
-  function pauseGame(){
-    if(gameTimer){ clearInterval(gameTimer); gameTimer=null; }
-    state.game.running=false; state.game.lastTs=null;
-    if(state.game.linkShot && state.shot.running) pauseShot();
-    updateGameUI(true);
-  }
-  function setGameLength(mins){
-    const ms = mins*60*1000;
-    state.game.totalMs = ms;
-    state.game.ms = ms;
-    gameLastShownSec = null;
-    updateGameUI(true);
-    if(state.game.running){ clearInterval(gameTimer); startGame(true); }
-  }
-  function resetGameClock(){
-    state.game.ms = state.game.totalMs;
-    gameLastShownSec = null;
-    updateGameUI(true);
-  }
-  function nextPeriod(){
-    state.period += 1;
-    if(state.period <= 4){
-      resetGameClock();
-    }else{
-      state.game.totalMs = 5*60*1000; // OT 統一 5:00
-      resetGameClock();
-    }
-    resetTeamFouls();
-    resetShot(24000, {autoRunIfLinked:true});
-    renderPeriod();
-    saveState();
-  }
-
-  // --- 綁定（Shot / Game / Team Fouls） ---
-  // Shot
-  document.getElementById('shotStart').onclick = ()=> startShot(true);
-  document.getElementById('shotPause').onclick = ()=> pauseShot();
-  document.getElementById('shotReset24').onclick = ()=> resetShot(24000, {autoRunIfLinked:true});
-  document.getElementById('shotReset14').onclick = ()=> resetShot(14000, {autoRunIfLinked:true});
-  document.getElementById('shotMinus').onclick = ()=>{ state.shot.ms = Math.max(0, state.shot.ms-1000); updateShotUI(true); if(state.shot.running){ clearInterval(shotTimer); startShot(true);} };
-  document.getElementById('shotPlus').onclick  = ()=>{ state.shot.ms = Math.min(24000, state.shot.ms+1000); updateShotUI(true); if(state.shot.running){ clearInterval(shotTimer); startShot(true);} };
-  document.getElementById('shotSwap').onclick  = ()=> { swapPossession(); if(state.game.linkShot && state.game.running) startShot(true); };
-  document.getElementById('shotViolation').onclick = ()=> shotViolationManual();
-
-  document.getElementById('qaOffReb14').onclick = ()=> resetShot(14000, {autoRunIfLinked:true});
-  document.getElementById('qaChangePoss24').onclick = ()=>{ swapPossession(); resetShot(24000, {autoRunIfLinked:true}); };
-
-  // Game
-  document.getElementById('gameStart').onclick = ()=> startGame(true);
-  document.getElementById('gamePause').onclick = ()=> pauseGame();
-  document.getElementById('gameReset').onclick = ()=> resetGameClock();
-  document.getElementById('set12').onclick = ()=> setGameLength(12);
-  document.getElementById('set10').onclick = ()=> setGameLength(10);
-  document.getElementById('set5').onclick  = ()=> setGameLength(5);
-  document.getElementById('toggleLink').onclick = ()=>{ state.game.linkShot = !state.game.linkShot; updateGameUI(true); };
-
-  // 比分 + 暫停
-  document.querySelectorAll('[data-add]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const [side,delta] = btn.dataset.add.split(':'); setScore(side, state[side].score + parseInt(delta,10));
-    });
-  });
-  document.querySelectorAll('[data-tos]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const [side,delta] = btn.dataset.tos.split(':'); state[side].timeouts = Math.max(0, (state[side].timeouts|0) + parseInt(delta,10));
-      document.getElementById(side+'TO').textContent = state[side].timeouts; saveState();
-    });
-  });
-
-  // 團隊犯規
-  document.querySelectorAll('[data-tf]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{ const [side,delta] = btn.dataset.tf.split(':'); addTeamFoul(side, parseInt(delta,10)); });
-  });
-  document.getElementById('homeFoulsReset').onclick = ()=>{ state.home.teamFouls=0; renderTeamFouls('home'); };
-  document.getElementById('awayFoulsReset').onclick = ()=>{ state.away.teamFouls=0; renderTeamFouls('away'); };
-
-  // 節次（手動調整）
-  document.getElementById('periodInc').onclick = ()=>{ state.period = (state.period|0)+1; if(state.period>4){ state.game.totalMs = 5*60*1000; } resetGameClock(); resetTeamFouls(); resetShot(24000, {autoRunIfLinked:true}); renderPeriod(); saveState(); };
-  document.getElementById('periodDec').onclick = ()=>{ state.period = Math.max(1,(state.period|0)-1); if(state.period>4){ state.game.totalMs = 5*60*1000; } resetGameClock(); resetTeamFouls(); resetShot(24000, {autoRunIfLinked:true}); renderPeriod(); saveState(); };
-
-  // 新增球員（在「球員索引」分頁）
-  const addPlayerBtn = document.getElementById('addPlayer');
-  if(addPlayerBtn){
-    addPlayerBtn.onclick = async ()=>{
-      const number = parseInt(document.getElementById('pNum').value||'0',10);
-      const name   = document.getElementById('pName').value.trim();
-      const team   = document.getElementById('pTeam').value;
-      const pos    = document.getElementById('pPos').value.trim();
-      if(!number || !name){ alert('請輸入背號與姓名'); return; }
-      const id = idOf(team, number);
-      const base = await get('players', id) || { id, team, number, name:'', pos:'', PTS:0, PF:0, AST:0, REB:0, STL:0, BLK:0, TOV:0 };
-      base.name=name; base.pos=pos;
-      await put('players', base);
-      document.getElementById('pNum').value=''; document.getElementById('pName').value=''; document.getElementById('pPos').value='';
-      renderPlayers();
-    };
-  }
-
-  // 匯出 TXT（UTF-8 BOM + CRLF）
-  function buildTxt(players){
-    const L = [];
-    L.push(`# ${state.gameTitle || '未命名比賽'}`);
-    L.push(`# Period: ${periodLabel(state.period)}`);
-    L.push(`# Score: HOME ${state.home.score} - AWAY ${state.away.score}`);
-    L.push(`# TeamFouls: HOME ${state.home.teamFouls} / AWAY ${state.away.teamFouls}${(state.home.teamFouls>=BONUS_LIMIT||state.away.teamFouls>=BONUS_LIMIT)?' (Bonus in effect)':''}`);
-    L.push(`# Timeouts: HOME ${state.home.timeouts} / AWAY ${state.away.timeouts}`);
-    L.push(`# GameClock: ${fmtGame(state.game.ms)} / ${fmtGame(state.game.totalMs)}${state.game.running?' (running)':''}`);
-    L.push(`# Possession: ${state.shot.poss==='home'?'HOME':'AWAY'}`);
-    const s = state.shot.ms/1000;
-    L.push(`# ShotClock: ${s>8?Math.ceil(s):s.toFixed(2)}s ${state.shot.running?'(running)':''}`);
-    L.push('');
-    L.push('Team,Number,Name,Pos,PTS,PF,AST,REB,STL,BLK,TOV');
-    players.sort((a,b)=> (a.team===b.team?0:(a.team==='home'?-1:1)) || (a.number-b.number))
-      .forEach(p=>L.push(`${p.team},${p.number},${p.name},${p.pos},${p.PTS|0},${p.PF|0},${p.AST|0},${p.REB|0},${p.STL|0},${p.BLK|0},${p.TOV|0}`));
-    const notes = (document.getElementById('notes')?.value||'').trim();
-    if(notes){ L.push(''); L.push('--- Notes ---'); L.push(notes); }
-    return L.join('\r\n');
-  }
-  async function getSavedHandle(){ const rec = await get('file','txtHandle'); return rec?.handle || null; }
-  async function setSavedHandle(handle){
-    try{ if (handle && handle.requestPermission) await handle.requestPermission({mode:'readwrite'});}catch(e){}
-    await put('file',{k:'txtHandle', handle});
-  }
-  async function saveAsTxt(){
-    const players = await allPlayers();
-    const txt = buildTxt(players);
-    const bom = '\ufeff';
-    if(window.showSaveFilePicker){
-      const handle = await window.showSaveFilePicker({
-        suggestedName: (state.gameTitle||'game') + '.txt',
-        types: [{ description: 'Text', accept: {'text/plain':['.txt']} }]
-      });
-      const writable = await handle.createWritable();
-      await writable.write(bom + txt);
-      await writable.close();
-      await setSavedHandle(handle);
-      alert('已匯出 TXT 並記住檔案位置。之後可用「更新」覆寫。');
-    }else{
-      const blob = new Blob([bom, txt], {type:'text/plain;charset=utf-8'});
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = (state.gameTitle||'game') + '-' + new Date().toISOString().replaceAll(':','').slice(0,15)+'.txt';
-      a.click();
-      URL.revokeObjectURL(a.href);
-      alert('瀏覽器不支援覆寫同檔，已下載新檔（含 UTF-8 BOM）。');
-    }
-  }
-  async function updateTxt(){
-    const handle = await getSavedHandle();
-    if(!handle){ await saveAsTxt(); return; }
-    try{
-      const players = await allPlayers();
-      const txt = buildTxt(players);
-      const writable = await handle.createWritable();
-      await writable.write('\ufeff' + txt);
-      await writable.close();
-      alert('已更新並覆寫原檔。');
-    }catch(err){
-      console.warn(err);
-      await saveAsTxt();
-    }
-  }
-
-  document.getElementById('btnExport').onclick = saveAsTxt;
-  document.getElementById('btnUpdate').onclick = updateTxt;
-
-  // 重置整場
-  document.getElementById('btnReset').onclick = async ()=>{
-    if(!confirm('確定要清空本場資料？（球員與分數等將清空）')) return;
-    db.close();
-    await new Promise((res,rej)=>{ const delReq = indexedDB.deleteDatabase(DB_NAME); delReq.onsuccess=()=>res(); delReq.onerror=()=>rej(delReq.error); });
-    await openDB();
-    location.reload();
-  };
-
-  // 啟動
-  (async function init(){
-    await openDB();
-    await loadState();
-    await renderPlayers();
-  })();
-  </script>
+  <script src="./app.js"></script>
 </body>
 </html>
