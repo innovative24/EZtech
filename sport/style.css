@@ -415,3 +415,29 @@ input[type="number"]{ -moz-appearance:textfield; }
   background: rgba(239,68,68,.2);
   border: 1px solid var(--danger);
 }
+
+/* Players View：卡片牆（每列 5 張，自動換行） */
+.players-cards{
+  display:flex; flex-wrap:wrap; gap:14px;
+}
+.players-cards .player-card{
+  width: 210px;
+  padding: 12px;
+  background: linear-gradient(180deg,#101a31,#0b1224);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-soft);
+  transition: transform .12s ease, box-shadow .18s ease;
+  cursor: pointer;
+}
+.players-cards .player-card:hover{ transform:translateY(-2px); box-shadow:0 6px 18px rgba(0,0,0,.35); }
+.players-cards .player-top{ display:flex; gap:10px; align-items:flex-start; }
+.players-cards .player-avatar{ width:48px; height:48px; border-radius:10px; object-fit:cover; border:1px solid var(--line); }
+.players-cards .player-num{ font:800 18px ui-monospace,Menlo,Consolas; }
+.players-cards .player-name{ font-weight:700; }
+.players-cards .player-meta{ font-size:12px; color:var(--muted); }
+.players-cards .player-stats{ display:flex; justify-content:space-between; margin-top:6px; }
+.players-cards .stat .label{ font-size:11px; color:var(--fg-dim); }
+.players-cards .stat .value{ font:800 18px ui-monospace,Menlo,Consolas; }
+
+.players-cards .foul-max{ background:rgba(239,68,68,.15); border-color:var(--danger); }
