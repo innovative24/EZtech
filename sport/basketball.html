@@ -4,12 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>籃球計分板</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
   <header>
     <div class="container row space-between">
-      <h1>🏀 籃球計分板</h1>
+      <h1>🏀 篮球計分板</h1>
       <div class="row">
         <button id="btnExport" class="btn">匯出 TXT</button>
         <button id="btnUpdate" class="btn-accent">更新（覆寫同檔）</button>
@@ -20,6 +20,7 @@
       <div class="tabs">
         <button class="tab active" data-view="scoreView">計分板</button>
         <button class="tab" data-view="playersView">球員索引</button>
+        <button class="tab" data-view="rulesView">規則設定</button>
       </div>
     </div>
   </header>
@@ -152,7 +153,7 @@
       <section class="card">
         <div class="row space-between">
           <div class="label">球員索引 / 新增球員</div>
-          <span class="chip">可直接點表格編輯；PF 會同步團隊犯規</span>
+          <span class="chip">PF 細分：一般／進攻／技／違體；PF 同步團隊犯規（依規則）</span>
         </div>
         <div class="grid grid-2 mt8">
           <input id="pNum" type="number" placeholder="背號（數字）"/>
@@ -173,12 +174,31 @@
             <thead>
               <tr>
                 <th>隊伍</th><th>背號</th><th>姓名</th><th>位置</th>
-                <th>分</th><th>犯</th><th>助</th><th>板</th><th>抄</th><th>阻</th><th>失</th>
+                <th>分</th><th>犯(總)</th><th>進攻</th><th>技</th><th>違體</th>
+                <th>助</th><th>板</th><th>抄</th><th>阻</th><th>失</th>
                 <th>操作</th>
               </tr>
             </thead>
             <tbody><!-- rows --></tbody>
           </table>
+        </div>
+      </section>
+    </div>
+
+    <!-- 規則設定 View -->
+    <div id="rulesView" class="view">
+      <section class="card">
+        <div class="label">犯規計數規則（哪些算入團隊犯規）</div>
+        <div class="grid grid-2 mt12">
+          <label><input type="checkbox" id="ruleCountCommon" checked> 一般犯規 計入團隊</label>
+          <label><input type="checkbox" id="ruleCountOffensive"> 進攻犯規 計入團隊</label>
+          <label><input type="checkbox" id="ruleCountTechnical"> 技術犯規 計入團隊</label>
+          <label><input type="checkbox" id="ruleCountUnsportsmanlike" checked> 違體犯規 計入團隊</label>
+        </div>
+        <div class="row mt12">
+          <button id="presetFIBA">FIBA 預設</button>
+          <button id="presetNBA">NBA 預設</button>
+          <span class="muted">（你也可自行勾選調整。此設定僅影響「團隊犯規」是否增加，不影響個人 PF 總數）</span>
         </div>
       </section>
     </div>
