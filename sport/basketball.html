@@ -20,6 +20,8 @@
     </div>
     <div class="container tabs-wrap">
       <div class="tabs">
+        <!-- 1) Header 的 tabs 加上 Dashboard -->
+        <button class="tab" data-view="dashboardView">Dashboard</button>
         <button class="tab active" data-view="scoreView">計分板</button>
         <button class="tab" data-view="playersView">球員索引</button>
         <button class="tab" data-view="playerAdminView">球員管理</button>
@@ -29,6 +31,111 @@
   </header>
 
   <main class="container main">
+    
+    <!-- 2) 新增：Dashboard View -->
+<div id="dashboardView" class="view">
+  <section class="card">
+    <!-- 計分區：左中右 -->
+    <div class="grid" style="grid-template-columns:1fr 1.2fr 1fr;">
+      <!-- 左：主隊 -->
+      <div class="card" style="padding:14px;">
+        <div class="label">主隊</div>
+        <div id="dashHomeName" class="score small">HOME</div>
+        <div id="dashHomeScore" class="score">0</div>
+      </div>
+
+      <!-- 中：比賽名稱 / 節次 -->
+      <div class="card" style="padding:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+        <div id="dashGameTitle" class="score small" style="text-align:center;">比賽名稱</div>
+        <div id="dashPeriod" class="label" style="margin-top:8px;font-size:16px;">第1節</div>
+      </div>
+
+      <!-- 右：客隊 -->
+      <div class="card" style="padding:14px;text-align:right;">
+        <div class="label">客隊</div>
+        <div id="dashAwayName" class="score small">AWAY</div>
+        <div id="dashAwayScore" class="score">0</div>
+      </div>
+    </div>
+
+    <hr class="divider" />
+
+    <!-- 計時與進攻時計：左右 -->
+    <div class="grid grid-2">
+      <!-- 左：比賽計時 -->
+      <div class="card" style="padding:14px;display:flex;flex-direction:column;align-items:center;">
+        <div class="label">比賽計時（Game Clock）</div>
+        <div id="dashGameClock" class="game-display" style="margin-top:6px;">12:00</div>
+        <div id="dashGameInfo" class="muted">長度：12:00</div>
+      </div>
+
+      <!-- 右：進攻時計 -->
+      <div class="card" style="padding:14px;display:flex;flex-direction:column;align-items:center;">
+        <div class="label">進攻時計（Shot Clock）</div>
+        <div id="dashShotClock" class="shot-display" style="margin-top:6px;">24</div>
+        <div id="dashPoss" class="muted">球權：主隊</div>
+      </div>
+    </div>
+
+    <hr class="divider" />
+
+    <!-- 上場球員（主隊） -->
+    <div class="row space-between">
+      <div class="label">主隊上場球員</div>
+      <div id="dashHomeTeamName" class="muted">主隊名稱</div>
+    </div>
+    <div id="dashHomeFive" class="row" style="gap:14px; flex-wrap:wrap;">
+      <!-- 動態插入 5 張卡片 -->
+    </div>
+
+    <hr class="divider" />
+
+    <!-- 上場球員（客隊） -->
+    <div class="row space-between">
+      <div class="label">客隊上場球員</div>
+      <div id="dashAwayTeamName" class="muted">客隊名稱</div>
+    </div>
+    <div id="dashAwayFive" class="row" style="gap:14px; flex-wrap:wrap;">
+      <!-- 動態插入 5 張卡片 -->
+    </div>
+  </section>
+
+  <!-- 卡片樣板（JS 會克隆填入） -->
+  <template id="dashPlayerCardTpl">
+    <div class="card" style="width:220px; padding:12px;">
+      <div class="row" style="align-items:flex-start;">
+        <img class="avatar" src="" alt="頭像" style="width:56px;height:56px;border-radius:10px;object-fit:cover;border:1px solid var(--line);" />
+        <div class="flex1" style="margin-left:10px;">
+          <div class="row" style="justify-content:space-between;">
+            <div class="mono" style="font-weight:800;font-size:18px;">#00</div>
+            <div class="badge" style="font-size:12px;color:#b2f5ea;">ON</div>
+          </div>
+          <div class="name" style="font-weight:700;">球員姓名</div>
+          <div class="muted" style="font-size:12px;">上場：0:00｜犯規：0</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- 簡要統計：PTS / REB / AST（必要） -->
+      <div class="row" style="justify-content:space-between;">
+        <div class="stat">
+          <div class="label">PTS</div>
+          <div class="mono" style="font-size:20px;font-weight:800;">0</div>
+        </div>
+        <div class="stat">
+          <div class="label">REB</div>
+          <div class="mono" style="font-size:20px;font-weight:800;">0</div>
+        </div>
+        <div class="stat">
+          <div class="label">AST</div>
+          <div class="mono" style="font-size:20px;font-weight:800;">0</div>
+        </div>
+      </div>
+    </div>
+  </template>
+</div>
+    
     <!-- 計分板 View -->
     <div id="scoreView" class="view active">
       <div class="grid grid-3">
