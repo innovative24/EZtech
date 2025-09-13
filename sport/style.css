@@ -1,75 +1,298 @@
-:root {
-  --bg:#0f172a; --card:#111827; --muted:#9ca3af; --accent:#22c55e;
-  --danger:#ef4444; --fg:#e5e7eb; --line:#1f2937; --warn:#f59e0b;
+/* ===============================
+   Basket Scoreboard — Polished UI
+   =============================== */
+
+:root{
+  --bg:#0b1020;           /* 背景 */
+  --bg-elev:#0f172a;      /* 卡片背景 */
+  --bg-elev-2:#0b1224;
+  --line:#1f2a44;         /* 邊框 */
+  --fg:#e7ecf5;           /* 文字 */
+  --fg-dim:#aab3c7;       /* 次要文字 */
+  --muted:#9aa6bf;        /* 輔助文 */
+  --accent:#22c55e;       /* 主要強調 */
+  --accent-2:#38bdf8;     /* 次強調 */
+  --warn:#f59e0b;         /* 警示/提醒 */
+  --danger:#ef4444;       /* 危險/刪除 */
+  --ok:#10b981;           /* 成功 */
+  --chip-bg:#0b2a24;      /* 標籤背景 */
+  --chip-bd:#14532d;      /* 標籤邊框 */
+
+  --radius:14px;
+  --radius-sm:10px;
+  --radius-xs:8px;
+  --shadow:0 10px 30px rgba(0,0,0,.35);
+  --shadow-soft:0 6px 16px rgba(0,0,0,.25);
+  --shadow-in:inset 0 1px 0 rgba(255,255,255,.04);
+  --focus:0 0 0 3px rgba(56,189,248,.25); /* 藍色 Focus Ring */
 }
+
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto}
-header{position:sticky;top:0;background:rgba(15,23,42,.85);backdrop-filter:saturate(180%) blur(10px);border-bottom:1px solid var(--line);z-index:10}
+html,body{height:100%}
+body{
+  margin:0;
+  background: radial-gradient(140% 130% at 100% 0%, #0e1224 20%, #0b1020 60%, #0a0e1b 100%);
+  color:var(--fg);
+  font:15.5px/1.55 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans TC, PingFang TC, "Microsoft JhengHei";
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+
+/* ===== Header & Tabs ===== */
+header{
+  position:sticky; top:0; z-index:30;
+  background:rgba(11,16,32,.75);
+  backdrop-filter:saturate(140%) blur(12px);
+  border-bottom:1px solid var(--line);
+}
 .container{max-width:1200px;margin:0 auto;padding:16px}
-h1{margin:0;font-size:20px}
+h1{margin:0;font-size:20px;letter-spacing:.3px}
+.tabs-wrap{padding-top:0}
+.tabs{display:flex;gap:8px;flex-wrap:wrap}
+.tab{
+  padding:10px 14px;
+  border:1px solid var(--line);
+  border-radius:var(--radius-sm);
+  background:linear-gradient(180deg, #0c142c, #0b1226);
+  color:var(--fg);
+  cursor:pointer;
+  transition:transform .08s ease, background .2s ease, border-color .2s ease;
+}
+.tab:hover{ transform:translateY(-1px); border-color:#31507a; }
+.tab.active{
+  background:linear-gradient(180deg,#17223a,#111b34);
+  border-color:#2b4369;
+  box-shadow:var(--shadow-in);
+}
+
+/* ===== Layout ===== */
+.main{padding-bottom:40px}
 .grid{display:grid;gap:16px}
 .grid-3{grid-template-columns:1.1fr 1.1fr 0.9fr}
 .grid-2{grid-template-columns:1fr 1fr}
-@media (max-width:1000px){ .grid-3{grid-template-columns:1fr} .grid-2{grid-template-columns:1fr} }
-.card{background:linear-gradient(180deg,#0b1224,#0b1224) padding-box, radial-gradient(120% 120% at 100% 0%, #1e293b, transparent 40%) border-box;border:1px solid var(--line);border-radius:14px;padding:16px}
-.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.grid-3 .card, .grid-2 .card{height:100%}
+@media (max-width:1000px){
+  .grid-3{grid-template-columns:1fr}
+  .grid-2{grid-template-columns:1fr}
+}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .space-between{justify-content:space-between}
 .center{justify-content:center}
-.score{font-size:44px;font-weight:800;letter-spacing:1px}
-.score.small{font-size:28px}
-.label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
-button,.btn{appearance:none;border:1px solid var(--line);background:#0b1224;color:var(--fg);padding:10px 14px;border-radius:10px;cursor:pointer}
-button:hover{border-color:#334155}
-.btn-accent{background:var(--accent);border-color:transparent;color:#04120a}
-.btn-danger{background:var(--danger);border-color:transparent;color:#fff}
-.btn-warn{background:var(--warn);border-color:transparent;color:#04120a}
-input,select,textarea{background:#0b1224;border:1px solid var(--line);color:var(--fg);padding:10px;border-radius:10px;width:100%}
-table{width:100%;border-collapse:collapse}
-th,td{border-bottom:1px solid var(--line);padding:8px;text-align:left}
-th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
-.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
-.chip{font-size:12px;color:#a7f3d0;background:#064e3b;padding:3px 8px;border-radius:9999px;border:1px solid #0f766e}
-.muted{color:var(--muted)}
-.divider{border:0;border-top:1px solid var(--line);margin:16px 0}
 .flex1{flex:1}
-.mt8{margin-top:8px}
-.mt12{margin-top:12px}
-.table-wrap{margin-top:12px;max-height:460px;overflow:auto;border:1px solid var(--line);border-radius:10px}
+.mt8{margin-top:8px} .mt12{margin-top:12px}
 
-/* Shot clock */
-.shot-face{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:8px 0}
-.shot-display{font:900 64px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:1px}
-.shot-danger{color:#fecaca}
+/* ===== Card ===== */
+.card{
+  background:
+    linear-gradient(180deg, #0f172a, #0b1224) padding-box,
+    radial-gradient(120% 160% at 100% 0%, rgba(56,189,248,.12), transparent 45%) border-box;
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:16px;
+  box-shadow:var(--shadow-soft);
+}
+.divider{border:0;border-top:1px solid var(--line);margin:16px 0}
 
-/* Game clock */
-.game-face{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:8px 0}
-.game-display{font:900 56px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:1px}
-.game-danger{color:#fde68a}
+/* ===== Text ===== */
+.label{
+  font-size:12px; color:var(--fg-dim);
+  text-transform:uppercase; letter-spacing:.12em;
+}
+.muted{color:var(--muted)}
+.mono{font-family:ui-monospace, Menlo, Consolas, monospace}
 
-/* Tabs */
-.tabs-wrap{padding-top:0}
-.tabs{display:flex;gap:8px}
-.tab{padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:#0b1224;cursor:pointer}
-.tab.active{background:#1f2937}
-.view{display:none}
-.view.active{display:block}
+/* ===== Buttons ===== */
+button,.btn{
+  appearance:none;
+  border:1px solid var(--line);
+  background:linear-gradient(180deg,#111a33,#0b1327);
+  color:var(--fg);
+  padding:10px 14px;
+  border-radius:var(--radius-sm);
+  cursor:pointer;
+  transition:transform .06s ease, border-color .2s ease, box-shadow .2s ease, background .2s ease, opacity .2s ease;
+}
+button:hover{ transform:translateY(-1px); border-color:#36578c; }
+button:active{ transform:translateY(0); }
+button:focus-visible{ outline:none; box-shadow:var(--focus); }
 
-/* Fouls/players */
-.bonus{padding:2px 8px;border-radius:999px;background:#451a03;color:#ffedd5;border:1px solid #78350f;font-size:12px}
-.foul-count{font:700 24px/1 ui-monospace,Menlo,Consolas,monospace}
-.opbtn{font-size:12px;padding:4px 8px;border-radius:8px}
-.opset{display:flex;flex-wrap:wrap;gap:6px}
-.tr-flag { background: rgba(239,68,68,.12); }
-.tr-eject { background: rgba(239,68,68,.22); border-left: 3px solid #ef4444; }
+.btn-accent{
+  background:linear-gradient(180deg,#22c55e,#17a34a);
+  border-color:transparent; color:#062813;
+}
+.btn-accent:hover{ filter:brightness(1.04); }
+.btn-danger{
+  background:linear-gradient(180deg,#ef4444,#dc2626);
+  border-color:transparent; color:#fff;
+}
+.btn-danger:hover{ filter:brightness(1.05); }
+.btn-warn{
+  background:linear-gradient(180deg,#f59e0b,#d97706);
+  border-color:transparent; color:#2b1a04;
+}
+.btn[disabled],button[disabled]{ opacity:.55; cursor:not-allowed; }
 
-/* Modal for free throws */
-.modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:20}
-.modal-box{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:320px;max-width:520px}
-.ft-shots{display:flex;flex-wrap:wrap;gap:8px}
-.ft-btn{min-width:90px}
+/* ===== Inputs ===== */
+input,select,textarea{
+  width:100%;
+  background:linear-gradient(180deg,#0c142b,#0a1226);
+  border:1px solid var(--line);
+  color:var(--fg);
+  padding:10px 12px;
+  border-radius:var(--radius-sm);
+  transition:border-color .2s ease, box-shadow .2s ease, background .2s ease;
+}
+input::placeholder,textarea::placeholder{ color:#74809a; }
+input:focus,select:focus,textarea:focus{
+  outline:none; border-color:#3e6aa8; box-shadow:var(--focus);
+}
+label{display:block; font-size:13px; color:var(--fg-dim); }
+label>input, label>select, label>textarea{ margin-top:6px; }
 
-/* Player admin */
-.player-form label{display:flex;flex-direction:column}
-.player-form .col-span-2{grid-column: span 2}
-.avatar{width:72px;height:72px;border-radius:8px;object-fit:cover;border:1px solid var(--line);background:#0b1224}
-.admin-avatar{width:40px;height:40px;border-radius:6px;object-fit:cover;border:1px solid var(--line);background:#0b1224}
+/* ===== Score ===== */
+.score{
+  font-size:46px; font-weight:800; letter-spacing:.5px;
+  text-shadow:0 4px 16px rgba(0,0,0,.35);
+}
+.score.small{font-size:30px}
+
+/* ===== Chips / Tags ===== */
+.chip{
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:12px; color:#b2f5ea;
+  background:linear-gradient(180deg,#063a35,#052e2a);
+  padding:4px 10px; border-radius:999px; border:1px solid var(--chip-bd);
+}
+
+/* ===== Tables ===== */
+.table-wrap{
+  margin-top:12px; border:1px solid var(--line);
+  border-radius:var(--radius); overflow:auto; max-height:520px;
+  box-shadow:var(--shadow-in);
+}
+table{ width:100%; border-collapse:collapse; }
+th,td{ padding:10px 12px; border-bottom:1px solid var(--line); }
+th{
+  position:sticky; top:0; z-index:1;
+  background:linear-gradient(180deg,#101a31,#0c1429);
+  font-size:12px; color:var(--fg-dim); text-transform:uppercase; letter-spacing:.08em;
+}
+tbody tr{ transition: background .15s ease; }
+tbody tr:hover{ background:rgba(56,189,248,.05); }
+
+/* 球員狀態標示 */
+.tr-flag{ background: rgba(239,68,68,.10); }
+.tr-eject{ background: rgba(239,68,68,.20); border-left:3px solid #ef4444; }
+
+/* ===== Team Fouls & Bonus ===== */
+.foul-count{ font:700 24px/1 ui-monospace, Menlo, Consolas; }
+.bonus{
+  padding:2px 8px; border-radius:999px;
+  background:#451a03; color:#ffedd5; border:1px solid #78350f; font-size:12px;
+}
+
+/* ===== Shot Clock ===== */
+.shot-face{ display:flex; flex-direction:column; align-items:center; gap:6px; padding:8px 0; }
+.shot-display{ font:900 64px/1 ui-monospace,Menlo,Consolas; letter-spacing:1px; }
+.shot-danger{ color:#fecaca; }
+
+/* ===== Game Clock ===== */
+.game-face{ display:flex; flex-direction:column; align-items:center; gap:6px; padding:8px 0; }
+.game-display{ font:900 56px/1 ui-monospace,Menlo,Consolas; letter-spacing:1px; }
+.game-danger{ color:#fde68a; }
+
+/* ===== Action set (小按鈕群) ===== */
+.opset{ display:flex; flex-wrap:wrap; gap:6px }
+.opbtn{ font-size:12px; padding:5px 8px; border-radius:var(--radius-xs); }
+
+/* ===== Views ===== */
+.view{ display:none; }
+.view.active{ display:block; animation:fadeIn .18s ease both; }
+@keyframes fadeIn{
+  from{ opacity:0; transform:translateY(4px); }
+  to{ opacity:1; transform:translateY(0); }
+}
+
+/* ===== Modal（罰球引導器 / 批量匯入） ===== */
+.modal{
+  position:fixed; inset:0; z-index:50;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(3,6,14,.6);
+  backdrop-filter:saturate(130%) blur(6px);
+}
+.modal-box{
+  background:linear-gradient(180deg,#0f172a,#0b1224);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:16px;
+  min-width:340px; max-width:720px; width:min(92vw,720px);
+  box-shadow:var(--shadow);
+}
+.ft-shots{ display:flex; flex-wrap:wrap; gap:10px; }
+.ft-btn{ min-width:96px; }
+
+/* ===== Player Admin extras ===== */
+.avatar-wrap{
+  width:120px;height:120px;border-radius:12px;overflow:hidden;
+  border:1px solid var(--line); background:#0a1222;
+  box-shadow:var(--shadow-in);
+}
+#playerAdminView .card .grid label input[type="file"]{
+  padding:8px; background:#0b1327; border-style:dashed;
+}
+#playerAdminView .card .grid label input[type="file"]:hover{
+  border-color:#3b6aa1;
+}
+
+/* Roster 表格裡的頭像縮圖 */
+.roster-avatar{
+  width:40px;height:40px;border-radius:8px;object-fit:cover;border:1px solid var(--line);
+  box-shadow:0 2px 6px rgba(0,0,0,.25);
+}
+
+/* 篩選列 */
+#filterTeam, #filterKeyword{ min-width:160px }
+
+/* ===== Form Helpers ===== */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+input[type="number"]{ -moz-appearance:textfield; }
+
+/* ===== Tooltips（純 CSS，必要時可加 title 屬性） ===== */
+[title]{ position:relative; }
+[title]:hover::after{
+  content:attr(title);
+  position:absolute; left:50%; transform:translateX(-50%);
+  bottom:calc(100% + 8px);
+  white-space:nowrap;
+  background:#101a31; color:#cfe7ff;
+  border:1px solid #2c4d7a; border-radius:8px;
+  padding:6px 8px; font-size:12px; z-index:10;
+  box-shadow:var(--shadow-soft);
+}
+
+/* ===== Scrollbar（美化） ===== */
+*{ scrollbar-width:thin; scrollbar-color:#30466e transparent; }
+*::-webkit-scrollbar{ height:10px; width:10px; }
+*::-webkit-scrollbar-track{ background:transparent; }
+*::-webkit-scrollbar-thumb{
+  background:linear-gradient(180deg,#2a3f66,#24385b);
+  border-radius:999px; border:2px solid transparent; background-clip:padding-box;
+}
+*::-webkit-scrollbar-thumb:hover{ background:linear-gradient(180deg,#364f7d,#2e476f); }
+
+/* ===== Small States ===== */
+.kbd{
+  font:12px/1 ui-monospace,Menlo,Consolas;
+  padding:2px 6px;border-radius:6px;border:1px solid #2a3f55;background:#0c1429;color:#9db7da;
+}
+
+/* ===== Responsive tweaks ===== */
+@media (max-width:640px){
+  .container{ padding:14px }
+  .score{ font-size:40px }
+  .shot-display{ font-size:58px }
+  .game-display{ font-size:48px }
+  .tab{ padding:8px 10px }
+  th,td{ padding:8px 10px }
+}
