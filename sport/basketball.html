@@ -29,7 +29,7 @@
   </header>
 
   <main class="container main">
-    <!-- 計分板 -->
+    <!-- 計分板 View -->
     <div id="scoreView" class="view active">
       <div class="grid grid-3">
         <!-- Scoreboard + Team Fouls -->
@@ -118,7 +118,7 @@
           </div>
         </section>
 
-        <!-- Shot Clock + 事件 -->
+        <!-- Shot Clock + 事件面板 -->
         <section class="card">
           <div class="row space-between">
             <div class="label">進攻時計（24s / 14s）</div>
@@ -142,8 +142,8 @@
           <hr class="divider">
           <div class="label">快速情境</div>
           <div class="row">
-            <button id="qaOffReb14">進攻籃板（14s）</button>
-            <button id="qaChangePoss24">換球權（24s）</button>
+            <button id="qaOffReb14" title="進攻籃板後重置 14 秒">進攻籃板（14s）</button>
+            <button id="qaChangePoss24" title="防守籃板或失誤等換球權重置 24 秒">換球權（24s）</button>
           </div>
 
           <hr class="divider">
@@ -171,12 +171,25 @@
       </div>
     </div>
 
-    <!-- 球員索引（比賽用 Box Score） -->
+    <!-- 球員索引（比賽中 box score 快速面板） -->
     <div id="playersView" class="view">
       <section class="card">
         <div class="row space-between">
-          <div class="label">球員索引 / 比賽操作</div>
-          <span class="chip">PF/T/U 上限自動警示；勾選「上場」累計 MIN</span>
+          <div class="label">球員索引 / 新增球員</div>
+          <span class="chip">犯(總)到上限自動標紅；T/U 到上限標記退場；勾選「上場」會累計上場時間</span>
+        </div>
+        <div class="grid grid-2 mt8">
+          <input id="pNum" type="number" placeholder="背號（數字）"/>
+          <input id="pName" placeholder="姓名"/>
+          <select id="pTeam">
+            <option value="home">主隊</option>
+            <option value="away">客隊</option>
+          </select>
+          <input id="pPos" placeholder="位置（G/F/C）"/>
+        </div>
+        <div class="row mt8">
+          <button id="addPlayer" class="btn-accent">加入名單</button>
+          <span class="muted">重複背號會覆蓋該隊同背號。</span>
         </div>
 
         <div class="table-wrap">
@@ -196,102 +209,183 @@
       </section>
     </div>
 
-    <!-- NEW 球員管理（高階資料登入） -->
+    <!-- 新增：球員管理（高階資料登入/批量管理） -->
     <div id="playerAdminView" class="view">
       <section class="card">
         <div class="row space-between">
           <div class="label">球員管理（高階資料登入）</div>
-          <span class="chip">以「隊伍 + 背號」為唯一鍵；重複將覆蓋</span>
-        </div>
-
-        <div class="grid grid-3 mt12 player-form">
-          <label>隊伍
-            <select id="aTeam">
-              <option value="home">主隊</option>
-              <option value="away">客隊</option>
-            </select>
-          </label>
-          <label>背號
-            <input id="aNumber" type="number" min="0" placeholder="例：7" />
-          </label>
-          <label>場上角色
-            <select id="aRole">
-              <option value="starter">先發</option>
-              <option value="bench">替補</option>
-            </select>
-          </label>
-
-          <label>姓名（中文）
-            <input id="aNameZh" placeholder="例：王小明" />
-          </label>
-          <label>姓名（英文）
-            <input id="aNameEn" placeholder="例：Wang Xiaoming" />
-          </label>
-          <label>位置
-            <select id="aPos">
-              <option value="PG">PG</option><option value="SG">SG</option>
-              <option value="SF">SF</option><option value="PF">PF</option>
-              <option value="C">C</option>
-            </select>
-          </label>
-
-          <label>身高（cm）
-            <input id="aHeight" type="number" min="100" max="250" placeholder="例：180" />
-          </label>
-          <label>體重（kg）
-            <input id="aWeight" type="number" min="40" max="150" placeholder="例：75" />
-          </label>
-          <label>生日
-            <input id="aDob" type="date" />
-          </label>
-
-          <label>國籍
-            <input id="aNation" placeholder="例：TW / USA / JPN" />
-          </label>
-          <label>慣用手
-            <select id="aHand">
-              <option value="R">右手</option>
-              <option value="L">左手</option>
-              <option value="Both">雙手</option>
-            </select>
-          </label>
-          <label>個人備註
-            <input id="aNote" placeholder="自訂說明…" />
-          </label>
-
-          <label class="col-span-2">頭像（JPG/PNG）
-            <input id="aAvatar" type="file" accept="image/*" />
-          </label>
-          <div>
-            <div class="label">預覽</div>
-            <img id="aPreview" class="avatar" alt="預覽" />
+          <div class="row">
+            <button id="btnBulkImport" class="btn">批量匯入</button>
+            <button id="btnBulkExport" class="btn">匯出名單 CSV</button>
+            <button id="btnClearRoster" class="btn-danger">清空名單</button>
           </div>
         </div>
 
-        <div class="row mt12">
-          <button id="btnSavePlayer" class="btn-accent">儲存 / 覆蓋</button>
-          <button id="btnClearForm" class="btn">清空表單</button>
+        <!-- 單筆新增/編輯表單 -->
+        <div class="grid grid-3 mt12">
+          <div class="card">
+            <div class="label">基本資料</div>
+            <div class="grid grid-2 mt8">
+              <label>隊伍
+                <select id="fmTeam">
+                  <option value="home">主隊</option>
+                  <option value="away">客隊</option>
+                </select>
+              </label>
+              <label>背號
+                <input id="fmNumber" type="number" min="0" placeholder="例：7" />
+              </label>
+              <label>姓名（中文）
+                <input id="fmNameZh" placeholder="例：王小明" />
+              </label>
+              <label>姓名（英文）
+                <input id="fmNameEn" placeholder="例：Ming Wang" />
+              </label>
+              <label>位置
+                <select id="fmPos">
+                  <option>PG</option><option>SG</option><option>SF</option><option>PF</option><option>C</option>
+                </select>
+              </label>
+              <label>場上角色
+                <select id="fmRole">
+                  <option value="starter">先發</option>
+                  <option value="bench">替補</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="grid grid-2 mt8">
+              <label>身高（cm）
+                <input id="fmHeight" type="number" min="120" max="250" placeholder="例：188" />
+              </label>
+              <label>體重（kg）
+                <input id="fmWeight" type="number" min="40" max="160" placeholder="例：85" />
+              </label>
+              <label>生日
+                <input id="fmDob" type="date" />
+              </label>
+              <label>國籍
+                <input id="fmNationality" placeholder="例：TW / USA" />
+              </label>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="label">比賽屬性 / 偏好</div>
+            <div class="grid grid-2 mt8">
+              <label>慣用手
+                <select id="fmHand">
+                  <option value="R">右手</option>
+                  <option value="L">左手</option>
+                </select>
+              </label>
+              <label>外線定位
+                <select id="fmArc">
+                  <option value="">—</option>
+                  <option value="3&D">3&D</option>
+                  <option value="Sharpshooter">純射手</option>
+                  <option value="Slasher">切入型</option>
+                  <option value="Point Forward">控球前鋒</option>
+                </select>
+              </label>
+              <label>背號外觀（可選）
+                <input id="fmNumberStyle" placeholder="例：NBA Block, College, ..."/>
+              </label>
+              <label>聯盟/學號/官方ID
+                <input id="fmRegId" placeholder="例：CIBL-2025-007" />
+              </label>
+            </div>
+
+            <div class="grid grid-2 mt8">
+              <label>Email（管理用）
+                <input id="fmEmail" type="email" placeholder="player@example.com" />
+              </label>
+              <label>電話（管理用）
+                <input id="fmPhone" type="tel" placeholder="09xx-xxx-xxx" />
+              </label>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="label">頭像 / 其他</div>
+            <div class="row mt8">
+              <div class="avatar-wrap">
+                <img id="fmAvatarPreview" alt="頭像預覽" style="width:120px;height:120px;border-radius:12px;object-fit:cover;border:1px solid var(--line);" />
+              </div>
+              <div class="grid" style="min-width:220px;">
+                <input id="fmAvatar" type="file" accept="image/*" />
+                <input id="fmAvatarUrl" placeholder="或貼上圖片 URL" />
+              </div>
+            </div>
+            <div class="row mt12">
+              <button id="btnSavePlayer" class="btn-accent">儲存 / 更新</button>
+              <button id="btnResetForm" class="btn">清空表單</button>
+              <span class="muted">同隊同背號會覆蓋（更新）。</span>
+            </div>
+          </div>
         </div>
 
-        <hr class="divider">
-        <div class="row space-between">
-          <div class="label">球員清單</div>
-          <input id="aSearch" placeholder="搜尋（背號/姓名/隊伍 home/away）" style="max-width:320px" />
+        <!-- 名單檢視 / 編輯 -->
+        <div class="card mt12">
+          <div class="row space-between">
+            <div class="label">名單總覽（可快速編輯）</div>
+            <div class="row">
+              <label class="row"><span class="label">顯示：</span>
+                <select id="filterTeam">
+                  <option value="all">全部</option>
+                  <option value="home">主隊</option>
+                  <option value="away">客隊</option>
+                </select>
+              </label>
+              <input id="filterKeyword" placeholder="搜尋姓名/背號/位置…" />
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table id="rosterTbl">
+              <thead>
+                <tr>
+                  <th>隊伍</th><th>背號</th><th>中文名</th><th>英文名</th><th>位置</th>
+                  <th>身高</th><th>體重</th><th>生日</th><th>國籍</th>
+                  <th>角色</th><th>慣手</th><th>官方ID</th><th>聯絡</th>
+                  <th>頭像</th><th>操作</th>
+                </tr>
+              </thead>
+              <tbody><!-- rows --></tbody>
+            </table>
+          </div>
         </div>
-        <div class="table-wrap">
-          <table id="adminTbl">
-            <thead>
-              <tr>
-                <th>頭像</th><th>隊伍</th><th>背號</th><th>姓名</th><th>英文名</th><th>位置</th><th>身高</th><th>體重</th><th>國籍</th><th>手</th><th>角色</th><th>生日</th><th>備註</th><th>操作</th>
-              </tr>
-            </thead>
-            <tbody><!-- rows --></tbody>
-          </table>
+
+        <!-- 批量匯入 Modal（CSV / 貼上） -->
+        <div id="bulkModal" class="modal" style="display:none">
+          <div class="modal-box">
+            <div class="row space-between">
+              <div class="label">批量匯入球員</div>
+              <button id="bulkClose">✕</button>
+            </div>
+            <div class="mt8">
+              <div class="muted">支援 CSV 欄位（可少可多）：team,number,nameZh,nameEn,pos,height,weight,dob,nationality,role,hand,regId,email,phone,avatarUrl</div>
+              <textarea id="bulkPaste" rows="8" placeholder="貼上 CSV 內容或以逗號分隔的多列資料"></textarea>
+              <div class="row mt8">
+                <input id="bulkFile" type="file" accept=".csv,text/csv,text/plain" />
+                <button id="bulkParse" class="btn-accent">解析預覽</button>
+              </div>
+            </div>
+            <div class="table-wrap mt12">
+              <table id="bulkPreviewTbl">
+                <thead><tr id="bulkHeadRow"></tr></thead>
+                <tbody id="bulkBody"></tbody>
+              </table>
+            </div>
+            <div class="row center mt12">
+              <button id="bulkConfirm" class="btn-accent">寫入名單</button>
+            </div>
+          </div>
         </div>
       </section>
     </div>
 
-    <!-- 規則設定 -->
+    <!-- 規則設定 + 裁判 -->
     <div id="rulesView" class="view">
       <section class="card">
         <div class="label">犯規計數規則（哪些算入團隊犯規）</div>
@@ -301,6 +395,7 @@
           <label><input type="checkbox" id="ruleCountTechnical"> 技術犯規 計入團隊</label>
           <label><input type="checkbox" id="ruleCountUnsportsmanlike" checked> 違體犯規 計入團隊</label>
         </div>
+
         <hr class="divider">
         <div class="label">上限 & 退場條件</div>
         <div class="grid grid-2 mt12">
@@ -339,7 +434,7 @@
         <button id="ftClose">✕</button>
       </div>
       <div id="ftInfo" class="mt8 muted"></div>
-      <div id="ftShots" class="ft-shots mt12"><!-- buttons --></div>
+      <div id="ftShots" class="ft-shots mt12"><!-- FT buttons --></div>
       <div class="row mt12 center">
         <button id="ftReset" class="btn">重置本次</button>
         <button id="ftDone" class="btn-accent">完成</button>
