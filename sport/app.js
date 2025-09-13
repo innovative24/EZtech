@@ -1610,3 +1610,157 @@ node.dataset.team = p.teamSide; // 繼續用 side 來上色
   window.renderPlayersCardsV2 = renderCards;
 })();
 
+/* ----------------------------
+   Player Admin — 控制程式
+   ---------------------------- */
+
+// 若你的 ensurePlayerShape 已支援 teamSide/teamName，可刪除這段覆寫
+(function patchEnsureShape(){
+  if(typeof ensurePlayerShape === 'function') return;
+  window.ensurePlayerShape = function(p){
+    p.teamSide = p.teamSide || p.team || 'home';
+    p.teamName = p.teamName || '';
+    p.team = p.teamSide;
+    p.number = Number(p.number||0);
+
+    p.nameZh = p.nameZh || p.name || '';
+    p.nameEn = p.nameEn || '';
+    p.pos = p.pos || '';
+    p.role = p.role || 'bench';
+    p.height = Number(p.height||0);
+    p.weight = Number(p.weight||0);
+    p.dob = p.dob || '';
+    p.nationality = p.nationality || '';
+    p.hand = p.hand || 'R';
+    p.arc = p.arc || '';
+    p.numberStyle = p.numberStyle || '';
+    p.regId = p.regId || '';
+    p.email = p.email || '';
+    p.phone = p.phone || '';
+    p.avatar = p.avatar || '';
+
+    p.PTS|=0; p.AST|=0; p.REB|=0; p.STL|=0; p.BLK|=0; p.TOV|=0;
+    p.PF|=0; p.PFOFF|=0; p.PFT|=0; p.PFU|=0;
+    p.oncourt = !!p.oncourt;
+    p.playMs = p.playMs|0;
+
+    if(p.alertedPF===undefined) p.alertedPF=false;
+    if(p.alertedT===undefined)  p.alertedT=false;
+    if(p.alertedU===undefined)  p.alertedU=false;
+    return p;
+  };
+})();
+
+const idOf = (side,num)=> `${side}#${num}`;
+
+function adminClearForm(){
+  const ids=['fmTeamName','fmSide','fmNumber','fmPos','fmNameZh','fmNameEn','fmRole','fmArc','fmHand','fmNationality','fmHeight','fmWeight','fmDob','fmRegId','fmEmail','fmPhone','fmAvatarUrl'];
+  ids.forEach(id=>{ const el=document.getElementById(id); if(!el) return; if(el.tagName==='SELECT'){ /* keep default */ } else el.value=''; });
+  document.getElementById('fmSide') && (document.getElementById('fmSide').value='home');
+  document.getElementById('fmPos') && (document.getElementById('fmPos').value='PG');
+  document.getElementById('fmRole') && (document.getElementById('fmRole').value='bench');
+  const img=document.getElementById('fmAvatarPreview'); if(img) img.src='';
+  const file=document.getElementById('fmAvatar'); if(file) file.value='';
+}
+
+function readFileAsDataURL(file){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(file); }); }
+async function resolveAvatarValue(){
+  const file = document.getElementById('fmAvatar')?.files?.[0];
+  const url  = document.getElementById('fmAvatarUrl')?.value?.trim();
+  if(file){ try{ return await readFileAsDataURL(file); }catch(e){} }
+  if(url){ return url; }
+  return '';
+}
+
+async function savePlayerFromForm(){
+  const teamName = (document.getElementById('fmTeamName')?.value || '').trim();
+  const side     = (document.getElementById('fmSide')?.value || 'home');
+  const number   = parseInt(document.getElementById('fmNumber')?.value || '0',10);
+
+  if(!number){ alert('請輸入背號（數字）'); return; }
+  if(side!=='home' && side!=='away'){ alert('本場歸屬必須是主或客'); return; }
+
+  const recBase = {
+    id: idOf(side, number),
+    teamSide: side,
+    teamName,
+    team: side, // 相容
+    number,
+    nameZh: document.getElementById('fmNameZh')?.value.trim() || '',
+    nameEn: document.getElementById('fmNameEn')?.value.trim() || '',
+    pos:     document.getElementById('fmPos')?.value || 'PG',
+    role:    document.getElementById('fmRole')?.value || 'bench',
+    height:  parseInt(document.getElementById('fmHeight')?.value || '0',10)||0,
+    weight:  parseInt(document.getElementById('fmWeight')?.value || '0',10)||0,
+    dob:     document.getElementById('fmDob')?.value || '',
+    nationality: document.getElementById('fmNationality')?.value.trim() || '',
+    hand:    document.getElementById('fmHand')?.value || 'R',
+    arc:     document.getElementById('fmArc')?.value || '',
+    numberStyle: document.getElementById('fmNumberStyle')?.value?.trim() || '',
+    regId:   document.getElementById('fmRegId')?.value?.trim() || '',
+    email:   document.getElementById('fmEmail')?.value?.trim() || '',
+    phone:   document.getElementById('fmPhone')?.value?.trim() || '',
+    avatar:  await resolveAvatarValue()
+  };
+  let rec = ensurePlayerShape(recBase);
+
+  // 合併既有統計
+  const existed = await get('players', rec.id);
+  if(existed){
+    rec.PTS=existed.PTS|0; rec.AST=existed.AST|0; rec.REB=existed.REB|0; rec.STL=existed.STL|0; rec.BLK=existed.BLK|0; rec.TOV=existed.TOV|0;
+    rec.PF=existed.PF|0; rec.PFOFF=existed.PFOFF|0; rec.PFT=existed.PFT|0; rec.PFU=existed.PFU|0;
+    rec.oncourt=!!existed.oncourt; rec.playMs=existed.playMs|0;
+    rec.alertedPF=!!existed.alertedPF; rec.alertedT=!!existed.alertedT; rec.alertedU=!!existed.alertedU;
+  }
+
+  await put('players', rec);
+
+  // 同步全局隊名（顯示用）
+  if(teamName){
+    state.teamNames = state.teamNames || {home:'', away:''};
+    state.teamNames[side] = teamName;
+    await saveState();
+  }
+
+  alert('已儲存 / 更新球員');
+
+  // ✅ 儲存後：刷新索引卡片牆與 Dashboard，不強迫顯示管理名單
+  if (typeof window.renderPlayersCardsV2 === 'function') window.renderPlayersCardsV2();
+  if (typeof window.__Dashboard?.renderFive === 'function') window.__Dashboard.renderFive();
+  if (typeof renderPlayers === 'function') renderPlayers();
+
+  // 清空表單（可依需要關閉）
+  // adminClearForm();
+}
+
+// 綁定按鈕與預覽
+document.getElementById('btnSavePlayer')?.addEventListener('click', savePlayerFromForm);
+document.getElementById('btnResetForm')?.addEventListener('click', adminClearForm);
+
+// 頭像預覽
+document.getElementById('fmAvatar')?.addEventListener('change', async ()=>{
+  const f = document.getElementById('fmAvatar').files?.[0];
+  const img = document.getElementById('fmAvatarPreview');
+  if(!f){ if(img) img.src=''; return; }
+  try{ if(img) img.src = await readFileAsDataURL(f); }catch(e){}
+});
+document.getElementById('fmAvatarUrl')?.addEventListener('input', ()=>{
+  const url = document.getElementById('fmAvatarUrl').value.trim();
+  const img = document.getElementById('fmAvatarPreview');
+  if(img) img.src = url || '';
+});
+
+// 名單顯示切換（預設隱藏）
+document.getElementById('toggleRosterBtn')?.addEventListener('click', ()=>{
+  const card = document.getElementById('adminRosterCard');
+  if(!card) return;
+  if(card.hasAttribute('hidden')){
+    card.removeAttribute('hidden');
+    if (typeof renderRoster === 'function') renderRoster();
+    document.getElementById('toggleRosterBtn').textContent = '隱藏名單';
+  }else{
+    card.setAttribute('hidden','');
+    document.getElementById('toggleRosterBtn').textContent = '顯示名單';
+  }
+});
+
