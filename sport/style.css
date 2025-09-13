@@ -522,3 +522,15 @@ input[type="number"]{ -moz-appearance:textfield; }
   box-shadow: 0 0 0 1px var(--danger) inset, 0 8px 20px rgba(239,68,68,.18);
 }
 
+/* Player Admin — Compact form */
+.admin-compact .card{ padding:14px }
+.admin-compact .grid{ gap:10px }
+.admin-compact label{ font-size:12px; color:var(--fg-dim) }
+.admin-compact input,
+.admin-compact select{ padding:8px 10px; font-size:14px; border-radius:10px }
+.admin-compact .help{ font-size:12px; color:var(--muted) }
+
+.field-sm input, .field-sm select{ padding:6px 8px; font-size:13px }
+
+#toggleRosterBtn{ font-size:12px; padding:6px 10px }
+#adminRosterCard[hidden]{ display:none }
