@@ -1568,17 +1568,3 @@ function bindEvents(){
   window.renderPlayersCardsV2 = renderCards;
 })();
 
-// Player Admin：切換名單顯示
-document.getElementById('toggleRosterBtn')?.addEventListener('click', ()=>{
-  const card = document.getElementById('adminRosterCard');
-  if(!card) return;
-  if(card.hasAttribute('hidden')){
-    card.removeAttribute('hidden');
-    // 第一次展開再渲染一次（避免平常浪費）
-    if (typeof renderRoster === 'function') renderRoster();
-    document.getElementById('toggleRosterBtn').textContent = '隱藏名單';
-  }else{
-    card.setAttribute('hidden','');
-    document.getElementById('toggleRosterBtn').textContent = '顯示名單';
-  }
-});
