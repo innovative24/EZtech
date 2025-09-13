@@ -48,6 +48,12 @@ const state = {
   },
   shot:{ ms:24000, running:false, lastTs:null, poss:'home' },
   game:{ ms:12*60*1000, totalMs:12*60*1000, running:false, lastTs:null, linkShot:false },
+    // NEW: 本場裁判
+  referees: {
+    crew: '',   // 裁判長
+    u1: '',     // 第一副審
+    u2: ''      // 第二副審
+  },
   ui:{ view:'scoreView' }
 };
 
@@ -80,6 +86,16 @@ async function loadState(){
   setView(state.ui.view || 'scoreView');
   if(state.shot.running) startShot(true);
   if(state.game.running) startGame(true);
+ 
+     // NEW: 裁判 UI 初始化
+  const r = state.referees || {};
+  const refCrew = document.getElementById('refCrew');
+  const refU1 = document.getElementById('refU1');
+  const refU2 = document.getElementById('refU2');
+  if(refCrew) refCrew.value = r.crew || '';
+  if(refU1)   refU1.value   = r.u1   || '';
+  if(refU2)   refU2.value   = r.u2   || '';
+  
 }
 
 // ====== 節次 / 比分 ======
@@ -372,6 +388,14 @@ function buildTxt(players){
   L.push(`# Timeouts: HOME ${state.home.timeouts} / AWAY ${state.away.timeouts}`);
   L.push(`# GameClock: ${fmtGame(state.game.ms)} / ${fmtGame(state.game.totalMs)}${state.game.running?' (running)':''}`);
   L.push(`# Possession: ${state.shot.poss==='home'?'HOME':'AWAY'}`);
+    // NEW: 裁判資訊
+  const R = state.referees || {};
+  const refLine = [
+    `Crew Chief: ${R.crew || '-'}`,
+    `Umpire 1: ${R.u1 || '-'}`,
+    `Umpire 2: ${R.u2 || '-'}`
+  ].join(' | ');
+  L.push(`# Referees: ${refLine}`);
   const s = state.shot.ms/1000;
   L.push(`# ShotClock: ${s>8?Math.ceil(s):s.toFixed(2)}s ${state.shot.running?'(running)':''}`);
   L.push('');
@@ -558,6 +582,17 @@ function bindEvents(){
     $('#limitPF').value = 6; $('#limitT').value = 2; $('#limitU').value = 2;
     syncRulesFromUI();
   });
+  
+    // NEW: 裁判輸入即時存檔
+  const onRefChange = ()=>{
+    state.referees.crew = document.getElementById('refCrew')?.value?.trim() || '';
+    state.referees.u1   = document.getElementById('refU1')?.value?.trim()   || '';
+    state.referees.u2   = document.getElementById('refU2')?.value?.trim()   || '';
+    saveState();
+  };
+  document.getElementById('refCrew')?.addEventListener('input', onRefChange);
+  document.getElementById('refU1')?.addEventListener('input', onRefChange);
+  document.getElementById('refU2')?.addEventListener('input', onRefChange);
 
   // 事件面板
   bindEventPanel();
