@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>籃球計分板（IndexedDB + TXT 匯出 + 24/14s）</title>
+  <style>
+    :root { --bg:#0f172a; --card:#111827; --muted:#9ca3af; --accent:#22c55e; --danger:#ef4444; --fg:#e5e7eb; --line:#1f2937; }
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto}
+    header{position:sticky;top:0;background:rgba(15,23,42,.85);backdrop-filter:saturate(180%) blur(10px);border-bottom:1px solid var(--line);z-index:10}
+    .container{max-width:1200px;margin:0 auto;padding:16px}
+    h1{margin:0;font-size:20px}
+    .grid{display:grid;gap:16px}
+    @media (min-width:1000px){ .grid-3{grid-template-columns:1.1fr 1.1fr 0.9fr} .grid-2{grid-template-columns:1fr 1fr} }
+    .card{background:linear-gradient(180deg,#0b1224, #0b1224) padding-box, radial-gradient(120% 120% at 100% 0%, #1e293b, transparent 40%) border-box;border:1px solid var(--line);border-radius:14px;padding:16px}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .score{font-size:44px;font-weight:800;letter-spacing:1px}
+    .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+    button,.btn{appearance:none;border:1px solid var(--line);background:#0b1224;color:var(--fg);padding:10px 14px;border-radius:10px;cursor:pointer}
+    button:hover{border-color:#334155}
+    .btn-accent{background:var(--accent);border-color:transparent;color:#04120a}
+    .btn-danger{background:var(--danger);border-color:transparent;color:#fff}
+    input,select{background:#0b1224;border:1px solid var(--line);color:var(--fg);padding:10px;border-radius:10px;width:100%}
+    table{width:100%;border-collapse:collapse}
+    th,td{border-bottom:1px solid var(--line);padding:8px;text-align:left}
+    th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+    .mono{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
+    .chip{font-size:12px;color:#a7f3d0;background:#064e3b;padding:3px 8px;border-radius:9999px;border:1px solid #0f766e}
+    .muted{color:var(--muted)}
+    /* Shot clock */
+    .shot-face{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:8px 0}
+    .shot-display{font:900 64px/1 ui-monospace,Menlo,Consolas,monospace;letter-spacing:1px}
+    .shot-pos{font-size:13px;color:#a7f3d0}
+    .shot-danger{color:#fecaca}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container row" style="justify-content:space-between">
+      <h1>🏀 籃球計分板</h1>
+      <div class="row">
+        <button id="btnExport" class="btn">匯出 TXT</button>
+        <button id="btnUpdate" class="btn-accent">更新（覆寫同檔）</button>
+        <button id="btnReset" class="btn-danger">清空本場</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container grid grid-3" style="margin-top:12px">
+    <!-- Scoreboard -->
+    <section class="card">
+      <div class="row" style="justify-content:space-between">
+        <div>
+          <div class="label">主隊</div>
+          <div class="score" id="homeScore">0</div>
+          <div class="row">
+            <button data-add="home:1">+1</button>
+            <button data-add="home:2">+2</button>
+            <button data-add="home:3">+3</button>
+            <button data-add="home:-1">-1</button>
+          </div>
+        </div>
+        <div>
+          <div class="label">客隊</div>
+          <div class="score" id="awayScore">0</div>
+          <div class="row">
+            <button data-add="away:1">+1</button>
+            <button data-add="away:2">+2</button>
+            <button data-add="away:3">+3</button>
+            <button data-add="away:-1">-1</button>
+          </div>
+        </div>
+      </div>
+      <hr style="border:0;border-top:1px solid var(--line);margin:16px 0" />
+      <div class="grid grid-2">
+        <div class="row">
+          <div style="flex:1">
+            <div class="label">節數</div>
+            <div class="row">
+              <button id="periodDec">-</button>
+              <div id="period" class="score" style="font-size:28px">1</div>
+              <button id="periodInc">+</button>
+            </div>
+          </div>
+          <div style="flex:1">
+            <div class="label">比賽資訊</div>
+            <input id="gameTitle" placeholder="比賽名稱（例：聯賽A：主隊 vs 客隊）" />
+          </div>
+        </div>
+        <div class="row">
+          <div style="flex:1">
+            <div class="label">主隊暫停</div>
+            <div class="row">
+              <button data-tos="home:-1">-</button>
+              <div id="homeTO" class="score" style="font-size:28px">6</div>
+              <button data-tos="home:1">+</button>
+            </div>
+          </div>
+          <div style="flex:1">
+            <div class="label">客隊暫停</div>
+            <div class="row">
+              <button data-tos="away:-1">-</button>
+              <div id="awayTO" class="score" style="font-size:28px">6</div>
+              <button data-tos="away:1">+</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Players -->
+    <section class="card">
+      <div class="row" style="justify-content:space-between">
+        <div class="label">新增球員</div>
+        <span class="chip">索引表格可直接點欄位編輯</span>
+      </div>
+      <div class="grid grid-2" style="margin-top:8px">
+        <input id="pNum" type="number" placeholder="背號（數字）"/>
+        <input id="pName" placeholder="姓名"/>
+        <select id="pTeam">
+          <option value="home">主隊</option>
+          <option value="away">客隊</option>
+        </select>
+        <input id="pPos" placeholder="位置（G/F/C）"/>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="addPlayer" class="btn-accent">加入名單</button>
+        <span class="muted">重複背號將覆蓋該隊同背號的球員資料。</span>
+      </div>
+
+      <div style="margin-top:12px;max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:10px">
+        <table id="playersTbl">
+          <thead>
+            <tr>
+              <th>隊伍</th><th>背號</th><th>姓名</th><th>位置</th><th>分</th><th>犯</th><th>助</th><th>板</th><th>抄</th><th>阻</th><th>失</th><th>操作</th>
+            </tr>
+          </thead>
+          <tbody><!-- rows --></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Shot Clock & Quick actions -->
+    <section class="card">
+      <div class="row" style="justify-content:space-between">
+        <div class="label">進攻時計（24s / 14s）</div>
+        <span class="chip">到 0 秒自動判 24 秒違例、蜂鳴、換球權</span>
+      </div>
+      <div class="shot-face">
+        <div id="shotDisplay" class="shot-display">24.0</div>
+        <div id="shotPos" class="shot-pos">球權：主隊</div>
+      </div>
+      <div class="row" style="justify-content:center">
+        <button id="shotStart" class="btn-accent">開始</button>
+        <button id="shotPause">暫停</button>
+        <button id="shotReset24">重置 24</button>
+        <button id="shotReset14">重置 14</button>
+        <button id="shotMinus">-1s</button>
+        <button id="shotPlus">+1s</button>
+        <button id="shotSwap">切換球權</button>
+        <button id="shotViolation" class="btn-danger">判 24 秒違例</button>
+      </div>
+      <hr style="border:0;border-top:1px solid var(--line);margin:12px 0">
+      <div class="label">快速情境</div>
+      <div class="row">
+        <button id="qaOffReb14" title="進攻籃板後重置 14 秒">進攻籃板（14s）</button>
+        <button id="qaChangePoss24" title="防守籃板或失誤等換球權重置 24 秒">換球權（24s）</button>
+      </div>
+
+      <div class="label" style="margin-top:12px">備註（可寫入TXT）</div>
+      <textarea id="notes" rows="6" style="width:100%;background:#0b1224;border:1px solid var(--line);color:#fff;border-radius:10px;padding:10px" placeholder="例：第三節 05:22 主隊 10:0 攻勢，#7 三分追平"></textarea>
+    </section>
+  </main>
+
+  <script>
+  // --- 小型 IndexedDB 工具 ---
+  const DB_NAME = 'basket-scoreboard';
+  const DB_VER  = 2; // 升版：新增 shotClock 狀態儲存
+  let db;
+
+  function openDB(){
+    return new Promise((resolve,reject)=>{
+      const req = indexedDB.open(DB_NAME, DB_VER);
+      req.onupgradeneeded = (e)=>{
+        const db = e.target.result;
+        if(!db.objectStoreNames.contains('players')){
+          const s = db.createObjectStore('players',{ keyPath:'id' });
+          s.createIndex('team','team',{unique:false});
+        }
+        if(!db.objectStoreNames.contains('game')){
+          db.createObjectStore('game',{ keyPath:'k' });
+        }
+        if(!db.objectStoreNames.contains('file')){
+          db.createObjectStore('file',{ keyPath:'k' });
+        }
+      };
+      req.onsuccess = ()=>{ db=req.result; resolve(db); };
+      req.onerror = ()=>reject(req.error);
+    });
+  }
+  function tx(store,mode='readonly'){ return db.transaction(store,mode).objectStore(store); }
+  const put = (store,val)=>new Promise((res,rej)=>{ const r=tx(store,'readwrite').put(val); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); });
+  const get = (store,key)=>new Promise((res,rej)=>{ const r=tx(store).get(key); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); });
+  const del = (store,key)=>new Promise((res,rej)=>{ const r=tx(store,'readwrite').delete(key); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); });
+  const allPlayersBoth = ()=>new Promise((res,rej)=>{
+    const s = tx('players'); const req = s.getAll();
+    req.onsuccess=()=>res(req.result||[]); req.onerror=()=>rej(req.error);
+  });
+
+  // --- 狀態 ---
+  const state = {
+    gameTitle:'',
+    period:1,
+    home:{score:0,timeouts:6},
+    away:{score:0,timeouts:6},
+    shot:{ // 進攻時計
+      ms:24000, running:false, lastTs:null, poss:'home' // poss: 'home' | 'away'
+    }
+  };
+
+  async function loadState(){
+    const saved = await get('game','state');
+    if(saved){
+      Object.assign(state,saved.v);
+      document.getElementById('gameTitle').value = state.gameTitle || '';
+      setScore('home', state.home.score);
+      setScore('away', state.away.score);
+      document.getElementById('homeTO').textContent = state.home.timeouts;
+      document.getElementById('awayTO').textContent = state.away.timeouts;
+      document.getElementById('period').textContent = state.period;
+      // shot
+      updateShotUI();
+      if(state.shot.running){ startShot(true); } // true: 從現有 ms 繼續
+    }
+  }
+  async function saveState(){ await put('game',{k:'state', v:structuredClone(state)}); }
+
+  function idOf(team,num){ return `${team}#${num}`; }
+
+  // --- UI 綁定（比分） ---
+  function setScore(side, val){
+    state[side].score = Math.max(0, val|0);
+    document.getElementById(side+'Score').textContent = state[side].score;
+    saveState();
+  }
+
+  function trForPlayer(p){
+    const tr = document.createElement('tr'); tr.dataset.id=p.id;
+    const keys = ['team','number','name','pos','PTS','PF','AST','REB','STL','BLK','TOV'];
+    for(const k of keys){
+      const td = document.createElement('td');
+      if(['PTS','PF','AST','REB','STL','BLK','TOV'].includes(k)){
+        td.className='mono';
+        td.textContent = p[k]|0;
+      }else if(k==='team'){
+        td.textContent = p.team==='home'?'主隊':'客隊';
+      }else{
+        td.contentEditable = true;
+        td.textContent = p[k] ?? '';
+        td.addEventListener('blur', async ()=>{
+          const storeVal = await get('players', p.id);
+          if(!storeVal) return;
+          if(k==='number'){
+            const newNum = parseInt(td.textContent||'0',10)||0;
+            if(newNum!==storeVal.number){
+              await del('players', storeVal.id);
+              storeVal.number = newNum;
+              storeVal.id = idOf(storeVal.team, newNum);
+            }
+          }else{
+            storeVal[k] = td.textContent.trim();
+          }
+          await put('players', storeVal);
+          renderPlayers();
+        });
+      }
+      tr.appendChild(td);
+    }
+    const op = document.createElement('td');
+    const btnDel = document.createElement('button');
+    btnDel.textContent='刪除';
+    btnDel.addEventListener('click', async ()=>{
+      await del('players', p.id);
+      renderPlayers();
+    });
+    op.appendChild(btnDel);
+    tr.appendChild(op);
+    return tr;
+  }
+
+  async function renderPlayers(){
+    const players = await allPlayersBoth();
+    const tbody = document.querySelector('#playersTbl tbody');
+    tbody.innerHTML='';
+    players.sort((a,b)=> (a.team===b.team?0:(a.team==='home'?-1:1)) || (a.number-b.number));
+    for(const p of players){ tbody.appendChild(trForPlayer(p)); }
+    updateQAList(players);
+  }
+
+  function updateQAList(players){
+    const sel = document.getElementById('qaPlayer');
+    if(!sel) return; // 這份 HTML 已移到 shot 區塊下方
+    // 若沒有「qaPlayer」則跳過（此模板保留了）
+  }
+
+  // 綁定加總分（快速統計按鈕原本在另一區，這裡用事件代理）
+  document.addEventListener('click', async (e)=>{
+    const t = e.target;
+    if(t.matches('[data-stat]')){
+      const v = t.dataset.stat; // "+PTS:2"
+      const [field,incStr] = v.slice(1).split(':'); const inc = parseInt(incStr,10);
+      const psel = document.getElementById('qaPlayer');
+      const id = psel?.value;
+      if(!id){ alert('尚無球員'); return; }
+      const p = await get('players', id);
+      if(!p) return;
+      p[field] = (p[field]|0) + inc;
+      if(field==='PTS'){
+        setScore(p.team, state[p.team].score + inc);
+      }
+      await put('players', p);
+      renderPlayers();
+    }
+  });
+
+  // --- Shot Clock 進攻時計 ---
+  let shotTimer = null;
+
+  function fmtShot(ms){
+    const s = ms/1000;
+    // 10 秒以上顯示整數；10 秒內顯示 0.1
+    if(s >= 10) return String(Math.ceil(s)).padStart(2,'0') + '.0';
+    return s.toFixed(1);
+  }
+
+  function updateShotUI(){
+    const d = document.getElementById('shotDisplay');
+    const pos = document.getElementById('shotPos');
+    d.textContent = fmtShot(Math.max(0, state.shot.ms));
+    d.classList.toggle('shot-danger', state.shot.ms<=5000);
+    pos.textContent = '球權：' + (state.shot.poss==='home'?'主隊':'客隊') + (state.shot.running?'（計時中）':'');
+    saveState();
+  }
+
+  function buzzer(){
+    // 簡易蜂鳴
+    try{
+      const ctx = new (window.AudioContext||window.webkitAudioContext)();
+      const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.type='square'; o.frequency.value= 440;
+      g.gain.setValueAtTime(0.001, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime+0.01);
+      o.start();
+      setTimeout(()=>{
+        g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+0.6);
+        o.stop(ctx.currentTime+0.65); ctx.close();
+      }, 600);
+    }catch(e){}
+  }
+
+  function startShot(resume=false){
+    if(shotTimer) clearInterval(shotTimer);
+    state.shot.running = true;
+    state.shot.lastTs = performance.now();
+    shotTimer = setInterval(()=>{
+      const now = performance.now();
+      const elapsed = now - state.shot.lastTs;
+      state.shot.lastTs = now;
+      state.shot.ms -= elapsed;
+      if(state.shot.ms <= 0){
+        state.shot.ms = 0;
+        updateShotUI();
+        clearInterval(shotTimer); shotTimer=null;
+        state.shot.running=false;
+        buzzer();
+        // 自動判違例：把失誤 +1 給持球隊並換球權 24s
+        shotViolationAuto();
+      }else{
+        updateShotUI();
+      }
+    }, 100);
+    updateShotUI();
+  }
+
+  function pauseShot(){
+    if(shotTimer){ clearInterval(shotTimer); shotTimer=null; }
+    state.shot.running=false; state.shot.lastTs=null;
+    updateShotUI();
+  }
+
+  function resetShot(ms){
+    state.shot.ms = ms;
+    state.shot.lastTs = performance.now();
+    updateShotUI();
+  }
+
+  function swapPossession(){
+    state.shot.poss = (state.shot.poss==='home'?'away':'home');
+    updateShotUI();
+  }
+
+  async function shotViolationAuto(){
+    // 自動：違例隊伍 +1 失誤 → 換球權 → 24 秒
+    const team = state.shot.poss; // 違例的是持球隊
+    // 找不到特定球員就不登記到個人，僅備註＋團隊層面可自由擴充
+    document.getElementById('notes').value += (document.getElementById('notes').value ? '\n':'') +
+      `【${new Date().toLocaleTimeString()}】${team==='home'?'主隊':'客隊'} 24秒違例`;
+    // 這裡僅作團隊失誤紀錄需求時，可挑「快速球員」來記：略
+    swapPossession();
+    resetShot(24000);
+    updateShotUI();
+    await saveState();
+  }
+
+  async function shotViolationManual(){
+    pauseShot(); buzzer();
+    await shotViolationAuto();
+  }
+
+  // 元件綁定
+  document.getElementById('shotStart').onclick = ()=> startShot(true);
+  document.getElementById('shotPause').onclick = ()=> pauseShot();
+  document.getElementById('shotReset24').onclick = ()=> resetShot(24000);
+  document.getElementById('shotReset14').onclick = ()=> resetShot(14000);
+  document.getElementById('shotMinus').onclick = ()=>{ state.shot.ms = Math.max(0, state.shot.ms-1000); updateShotUI(); };
+  document.getElementById('shotPlus').onclick  = ()=>{ state.shot.ms = Math.min(24000, state.shot.ms+1000); updateShotUI(); };
+  document.getElementById('shotSwap').onclick  = ()=> swapPossession();
+  document.getElementById('shotViolation').onclick = ()=> shotViolationManual();
+
+  // 快速情境
+  document.getElementById('qaOffReb14').onclick = ()=>{
+    // 同隊進攻籃板（球權不變）→ 14 秒
+    resetShot(14000);
+  };
+  document.getElementById('qaChangePoss24').onclick = ()=>{
+    // 防守籃板或失誤等 → 換球權 + 24 秒
+    swapPossession();
+    resetShot(24000);
+  };
+
+  // --- 其它事件（原有） ---
+  document.querySelectorAll('[data-add]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const [side,delta] = btn.dataset.add.split(':'); setScore(side, state[side].score + parseInt(delta,10));
+    });
+  });
+  document.querySelectorAll('[data-tos]').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const [side,delta] = btn.dataset.tos.split(':'); state[side].timeouts = Math.max(0, (state[side].timeouts|0) + parseInt(delta,10));
+      document.getElementById(side+'TO').textContent = state[side].timeouts; saveState();
+    });
+  });
+
+  document.getElementById('periodInc').onclick = ()=>{ state.period = (state.period|0)+1; document.getElementById('period').textContent=state.period; saveState(); };
+  document.getElementById('periodDec').onclick = ()=>{ state.period = Math.max(1,(state.period|0)-1); document.getElementById('period').textContent=state.period; saveState(); };
+  document.getElementById('gameTitle').addEventListener('input', e=>{ state.gameTitle = e.target.value; saveState(); });
+
+  document.getElementById('addPlayer').onclick = async ()=>{
+    const number = parseInt(document.getElementById('pNum').value||'0',10);
+    const name   = document.getElementById('pName').value.trim();
+    const team   = document.getElementById('pTeam').value;
+    const pos    = document.getElementById('pPos').value.trim();
+    if(!number || !name){ alert('請輸入背號與姓名'); return; }
+    const id = idOf(team, number);
+    const base = await get('players', id) || { id, team, number, name:'', pos:'', PTS:0, PF:0, AST:0, REB:0, STL:0, BLK:0, TOV:0 };
+    base.name=name; base.pos=pos;
+    await put('players', base);
+    document.getElementById('pNum').value=''; document.getElementById('pName').value=''; document.getElementById('pPos').value='';
+    renderPlayers();
+  };
+
+  document.getElementById('btnReset').onclick = async ()=>{
+    if(!confirm('確定要清空本場資料？（球員與分數將清空）')) return;
+    db.close();
+    await new Promise((res,rej)=>{
+      const delReq = indexedDB.deleteDatabase(DB_NAME);
+      delReq.onsuccess=()=>res(); delReq.onerror=()=>rej(delReq.error);
+    });
+    await openDB();
+    location.reload();
+  };
+
+  // --- 匯出 TXT / 覆寫（原有） ---
+  function buildTxt(players){
+    const lines = [];
+    lines.push(`# ${state.gameTitle || '未命名比賽'}`);
+    lines.push(`# Period: ${state.period}`);
+    lines.push(`# Score: HOME ${state.home.score} - AWAY ${state.away.score}`);
+    lines.push(`# Timeouts: HOME ${state.home.timeouts} / AWAY ${state.away.timeouts}`);
+    lines.push(`# Possession: ${state.shot.poss==='home'?'HOME':'AWAY'}`);
+    lines.push(`# ShotClock: ${(state.shot.ms/1000).toFixed(1)}s ${state.shot.running?'(running)':''}`);
+    lines.push('');
+    lines.push('Team,Number,Name,Pos,PTS,PF,AST,REB,STL,BLK,TOV');
+    for(const p of players.sort((a,b)=> (a.team===b.team?0:(a.team==='home'?-1:1)) || (a.number-b.number))){
+      lines.push(`${p.team},${p.number},${p.name},${p.pos},${p.PTS|0},${p.PF|0},${p.AST|0},${p.REB|0},${p.STL|0},${p.BLK|0},${p.TOV|0}`);
+    }
+    lines.push('');
+    const notes = document.getElementById('notes').value.trim();
+    if(notes){ lines.push('--- Notes ---'); lines.push(notes); }
+    return lines.join('\n');
+  }
+
+  async function getSavedHandle(){ const rec = await get('file','txtHandle'); return rec?.handle || null; }
+  async function setSavedHandle(handle){
+    try{ if (handle && handle.requestPermission) await handle.requestPermission({mode:'readwrite'});}catch(e){}
+    await put('file',{k:'txtHandle', handle});
+  }
+
+  async function saveAsTxt(){
+    const players = await allPlayersBoth();
+    const txt = buildTxt(players);
+    if(window.showSaveFilePicker){
+      const handle = await window.showSaveFilePicker({
+        suggestedName: (state.gameTitle||'game') + '.txt',
+        types: [{ description: 'Text', accept: {'text/plain':['.txt']} }]
+      });
+      const writable = await handle.createWritable();
+      await writable.write(txt); await writable.close();
+      await setSavedHandle(handle);
+      alert('已匯出 TXT 並記住檔案位置。之後可用「更新」覆寫。');
+    }else{
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([txt], {type:'text/plain'}));
+      a.download = (state.gameTitle||'game') + '-' + new Date().toISOString().replaceAll(':','').slice(0,15)+'.txt';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      alert('瀏覽器不支援覆寫同檔，已下載新檔。');
+    }
+  }
+  async function updateTxt(){
+    const handle = await getSavedHandle();
+    if(!handle){ await saveAsTxt(); return; }
+    try{
+      const players = await allPlayersBoth();
+      const txt = buildTxt(players);
+      const writable = await handle.createWritable();
+      await writable.write(txt); await writable.close();
+      alert('已更新並覆寫原檔。');
+    }catch(err){
+      console.warn(err);
+      await saveAsTxt();
+    }
+  }
+  document.getElementById('btnExport').onclick = saveAsTxt;
+  document.getElementById('btnUpdate').onclick = updateTxt;
+
+  // --- 啟動 ---
+  (async function init(){
+    await openDB();
+    await loadState();
+    await renderPlayers();
+    // 若沒有歷史，初始化 shot UI
+    updateShotUI();
+  })();
+  </script>
+</body>
+</html>
