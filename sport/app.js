@@ -1,9 +1,9 @@
 // ====== 常數 ======
 const DB_NAME = 'basket-scoreboard';
-const DB_VER  = 5; // 與上一版一致
+const DB_VER  = 6; // 升版：加入犯規細分 + 規則設定
 const BONUS_LIMIT = 5;
 
-// ====== IndexedDB 小工具 ======
+// ====== IndexedDB ======
 let db;
 function openDB(){
   return new Promise((resolve,reject)=>{
@@ -37,35 +37,41 @@ const state = {
   period:1,
   home:{score:0,timeouts:6,teamFouls:0},
   away:{score:0,timeouts:6,teamFouls:0},
+  // 規則：哪些犯規列入團隊犯規
+  rules:{
+    countCommon:true,        // 一般（含防守/非控球）
+    countOffensive:false,    // 進攻犯規（team control）
+    countTechnical:false,    // 技術犯規
+    countUnsportsmanlike:true// 違體犯規
+  },
   shot:{ ms:24000, running:false, lastTs:null, poss:'home' },
   game:{ ms:12*60*1000, totalMs:12*60*1000, running:false, lastTs:null, linkShot:false },
   ui:{ view:'scoreView' }
 };
 
-// 安全 deep copy（取代 structuredClone）
-function deepCopy(obj){ return JSON.parse(JSON.stringify(obj)); }
+// 安全 deep copy（替代 structuredClone）
+const deepCopy = (o)=>JSON.parse(JSON.stringify(o));
 async function saveState(){ await put('game',{k:'state', v:deepCopy(state)}); }
-function idOf(team,num){ return `${team}#${num}`; }
-function periodLabel(n){ return n<=4 ? `第${n}節` : `OT${n-4}`; }
+const $ = (sel)=>document.querySelector(sel);
+const idOf = (team,num)=>`${team}#${num}`;
+const periodLabel = (n)=> n<=4 ? `第${n}節` : `OT${n-4}`;
 
 // ====== 初始化 ======
-const $ = (sel)=>document.querySelector(sel);
-
 async function loadState(){
   const saved = await get('game','state');
   if(saved){ Object.assign(state,saved.v); }
-  // 初始化 UI（有元素才更新，避免空指標）
   const titleEl = $('#gameTitle'); if(titleEl) titleEl.value = state.gameTitle || '';
   setScore('home', state.home.score);
   setScore('away', state.away.score);
   renderTeamFouls('home'); renderTeamFouls('away');
-
-  const homeTOEl = $('#homeTO'); if(homeTOEl) homeTOEl.textContent = state.home.timeouts;
-  const awayTOEl = $('#awayTO'); if(awayTOEl) awayTOEl.textContent = state.away.timeouts;
-
   renderPeriod();
   updateShotUI(true);
   updateGameUI(true);
+  // 規則 UI
+  $('#ruleCountCommon').checked = !!state.rules.countCommon;
+  $('#ruleCountOffensive').checked = !!state.rules.countOffensive;
+  $('#ruleCountTechnical').checked = !!state.rules.countTechnical;
+  $('#ruleCountUnsportsmanlike').checked = !!state.rules.countUnsportsmanlike;
   setView(state.ui.view || 'scoreView');
   if(state.shot.running) startShot(true);
   if(state.game.running) startGame(true);
@@ -95,8 +101,18 @@ function resetTeamFouls(){
   renderTeamFouls('home'); renderTeamFouls('away');
 }
 
-// ====== 球員表格（含個人犯規控制） ======
-function trForPlayer(p){
+// ====== 球員表格（含犯規細分） ======
+function ensurePlayerShape(p){
+  // 新欄位預設值
+  p.PF  = p.PF|0;
+  p.PFOFF = p.PFOFF|0; // 進攻
+  p.PFT = p.PFT|0;     // 技術
+  p.PFU = p.PFU|0;     // 違體
+  return p;
+}
+
+function trForPlayer(p0){
+  const p = ensurePlayerShape(p0);
   const tr = document.createElement('tr'); tr.dataset.id=p.id;
   const cells = [
     ['team', p.team==='home'?'主隊':'客隊', false],
@@ -105,6 +121,9 @@ function trForPlayer(p){
     ['pos', p.pos||'', true],
     ['PTS', p.PTS|0, false],
     ['PF',  p.PF|0,  false],
+    ['PFOFF', p.PFOFF|0, false],
+    ['PFT', p.PFT|0, false],
+    ['PFU', p.PFU|0, false],
     ['AST', p.AST|0, false],
     ['REB', p.REB|0, false],
     ['STL', p.STL|0, false],
@@ -113,7 +132,7 @@ function trForPlayer(p){
   ];
   for(const [k,val,editable] of cells){
     const td = document.createElement('td');
-    td.className = ['PTS','PF','AST','REB','STL','BLK','TOV'].includes(k)?'mono':'';
+    td.className = ['PTS','PF','PFOFF','PFT','PFU','AST','REB','STL','BLK','TOV'].includes(k)?'mono':'';
     td.textContent = val;
     if(editable){
       td.contentEditable = true;
@@ -130,43 +149,76 @@ function trForPlayer(p){
         }else{
           storeVal[k] = td.textContent.trim();
         }
-        await put('players', storeVal);
+        await put('players', ensurePlayerShape(storeVal));
         renderPlayers();
       });
     }
     tr.appendChild(td);
   }
   const op = document.createElement('td');
+  const box = document.createElement('div'); box.className='opset';
 
-  const pfPlus = document.createElement('button');
-  pfPlus.textContent = '+ 犯規'; pfPlus.className='opbtn btn-warn';
-  pfPlus.addEventListener('click', async ()=>{
-    const rec = await get('players', p.id); if(!rec) return;
-    rec.PF = (rec.PF|0)+1; await put('players', rec); addTeamFoul(rec.team, +1); renderPlayers();
-  });
+  const mkBtn=(txt, cls, fn)=>{ const b=document.createElement('button'); b.textContent=txt; b.className='opbtn '+(cls||''); b.addEventListener('click', fn); return b; };
 
-  const pfMinus = document.createElement('button');
-  pfMinus.textContent = '- 犯規'; pfMinus.className='opbtn';
-  pfMinus.addEventListener('click', async ()=>{
-    const rec = await get('players', p.id); if(!rec) return;
-    if((rec.PF|0)>0){ rec.PF = rec.PF-1; await put('players', rec); addTeamFoul(rec.team, -1); renderPlayers(); }
-  });
+  // 加法
+  box.appendChild(mkBtn('+ 一般','btn-warn', ()=> updatePersonalFoul(p.id,'common', +1)));
+  box.appendChild(mkBtn('+ 進攻','btn-warn', ()=> updatePersonalFoul(p.id,'offensive', +1)));
+  box.appendChild(mkBtn('+ 技','btn-warn', ()=> updatePersonalFoul(p.id,'technical', +1)));
+  box.appendChild(mkBtn('+ 違體','btn-warn', ()=> updatePersonalFoul(p.id,'unsportsmanlike', +1)));
+  // 減法
+  box.appendChild(mkBtn('- 一般',null, ()=> updatePersonalFoul(p.id,'common', -1)));
+  box.appendChild(mkBtn('- 進攻',null, ()=> updatePersonalFoul(p.id,'offensive', -1)));
+  box.appendChild(mkBtn('- 技',null, ()=> updatePersonalFoul(p.id,'technical', -1)));
+  box.appendChild(mkBtn('- 違體',null, ()=> updatePersonalFoul(p.id,'unsportsmanlike', -1)));
+  // 刪除
+  box.appendChild(mkBtn('刪除',null, async ()=>{ await del('players', p.id); renderPlayers(); }));
 
-  const delBtn = document.createElement('button');
-  delBtn.textContent='刪除'; delBtn.className='opbtn';
-  delBtn.addEventListener('click', async ()=>{ await del('players', p.id); renderPlayers(); });
-
-  op.appendChild(pfPlus); op.appendChild(pfMinus); op.appendChild(delBtn);
+  op.appendChild(box);
   tr.appendChild(op);
   return tr;
 }
+
 async function renderPlayers(){
-  const players = await allPlayers();
+  const players = (await allPlayers()).map(ensurePlayerShape);
   const tbody = document.querySelector('#playersTbl tbody');
   if(!tbody) return;
   tbody.innerHTML='';
   players.sort((a,b)=> (a.team===b.team?0:(a.team==='home'?-1:1)) || (a.number-b.number));
   for(const p of players){ tbody.appendChild(trForPlayer(p)); }
+}
+
+// 更新個人犯規（含團隊犯規規則判斷）
+async function updatePersonalFoul(playerId, type, delta){
+  const rec = await get('players', playerId);
+  if(!rec) return;
+  ensurePlayerShape(rec);
+
+  // 個人分項
+  if(type==='common'){ rec.PF = Math.max(0,(rec.PF|0)+delta); }
+  else if(type==='offensive'){ rec.PFOFF = Math.max(0,(rec.PFOFF|0)+delta); }
+  else if(type==='technical'){ rec.PFT = Math.max(0,(rec.PFT|0)+delta); }
+  else if(type==='unsportsmanlike'){ rec.PFU = Math.max(0,(rec.PFU|0)+delta); }
+
+  // 個人總 PF = 分項合計（保險重算）
+  rec.PF = Math.max(0,(rec.PF|0));
+  const sum = (rec.PFOFF|0) + (rec.PFT|0) + (rec.PFU|0) + (rec.PF|0);
+  // 上面 PF 已作為「一般」的欄位，因此個人總數另外做個顯示？
+  // 這裡維持原 PF 為「總」呈現：把 PF 改為四項合計
+  rec.PF = sum;
+
+  // 團隊犯規是否變動
+  let countToTeam = false;
+  if(type==='common' && state.rules.countCommon) countToTeam = true;
+  if(type==='offensive' && state.rules.countOffensive) countToTeam = true;
+  if(type==='technical' && state.rules.countTechnical) countToTeam = true;
+  if(type==='unsportsmanlike' && state.rules.countUnsportsmanlike) countToTeam = true;
+
+  if(countToTeam){
+    addTeamFoul(rec.team, delta);
+  }
+
+  await put('players', rec);
+  renderPlayers();
 }
 
 // ====== Tabs ======
@@ -180,7 +232,7 @@ document.querySelectorAll('.tab').forEach(btn=>{
   btn.addEventListener('click', ()=> setView(btn.dataset.view));
 });
 
-// ====== Shot Clock ======
+// ====== Shot Clock（>8s：整秒；≤8s：兩位小數） ======
 let shotTimer = null, lastShownWhole = null;
 function fmtShot(ms){
   const s = Math.max(0, ms)/1000;
@@ -304,7 +356,7 @@ function startGame(){
   if(gameTimer) clearInterval(gameTimer);
   state.game.running = true;
   state.game.lastTs = performance.now();
-  if(state.game.linkShot && !state.shot.running) startShot(); // 同步啟動 24s
+  if(state.game.linkShot && !state.shot.running) startShot();
   const tick = ()=>{
     const now = performance.now();
     const elapsed = now - state.game.lastTs;
@@ -357,7 +409,7 @@ function nextPeriod(){
   saveState();
 }
 
-// ====== 匯出 TXT（UTF-8 BOM + CRLF） ======
+// ====== TXT 匯出（UTF-8 BOM + CRLF） ======
 function buildTxt(players){
   const L = [];
   L.push(`# ${state.gameTitle || '未命名比賽'}`);
@@ -370,9 +422,16 @@ function buildTxt(players){
   const s = state.shot.ms/1000;
   L.push(`# ShotClock: ${s>8?Math.ceil(s):s.toFixed(2)}s ${state.shot.running?'(running)':''}`);
   L.push('');
-  L.push('Team,Number,Name,Pos,PTS,PF,AST,REB,STL,BLK,TOV');
+  L.push('Team,Number,Name,Pos,PTS,PF_Total,PF_Off,PF_Tech,PF_Unspt,AST,REB,STL,BLK,TOV');
   players.sort((a,b)=> (a.team===b.team?0:(a.team==='home'?-1:1)) || (a.number-b.number))
-    .forEach(p=>L.push(`${p.team},${p.number},${p.name},${p.pos},${p.PTS|0},${p.PF|0},${p.AST|0},${p.REB|0},${p.STL|0},${p.BLK|0},${p.TOV|0}`));
+    .forEach(p=>{
+      const row = [
+        p.team, p.number, p.name, p.pos,
+        p.PTS|0, (p.PF|0), (p.PFOFF|0), (p.PFT|0), (p.PFU|0),
+        p.AST|0, p.REB|0, p.STL|0, p.BLK|0, p.TOV|0
+      ];
+      L.push(row.join(','));
+    });
   const notes = (document.getElementById('notes')?.value||'').trim();
   if(notes){ L.push(''); L.push('--- Notes ---'); L.push(notes); }
   return L.join('\r\n');
@@ -383,7 +442,7 @@ async function setSavedHandle(handle){
   await put('file',{k:'txtHandle', handle});
 }
 async function saveAsTxt(){
-  const players = await allPlayers();
+  const players = (await allPlayers()).map(ensurePlayerShape);
   const txt = buildTxt(players);
   const bom = '\ufeff';
   if(window.showSaveFilePicker){
@@ -410,7 +469,7 @@ async function updateTxt(){
   const handle = await getSavedHandle();
   if(!handle){ await saveAsTxt(); return; }
   try{
-    const players = await allPlayers();
+    const players = (await allPlayers()).map(ensurePlayerShape);
     const txt = buildTxt(players);
     const writable = await handle.createWritable();
     await writable.write('\ufeff' + txt);
@@ -422,59 +481,51 @@ async function updateTxt(){
   }
 }
 
-// ====== 事件綁定 ======
+// ====== 綁定事件 ======
 function bindEvents(){
   // 匯出
   const be=$('#btnExport'); if(be) be.onclick = saveAsTxt;
   const bu=$('#btnUpdate'); if(bu) bu.onclick = updateTxt;
 
-  // 重置整場
+  // 清空
   const br=$('#btnReset'); if(br) br.onclick = async ()=>{
     if(!confirm('確定要清空本場資料？（球員與分數等將清空）')) return;
     db.close();
     await new Promise((res,rej)=>{ const delReq = indexedDB.deleteDatabase(DB_NAME); delReq.onsuccess=()=>res(); delReq.onerror=()=>rej(delReq.error); });
-    await openDB();
-    location.reload();
+    await openDB(); location.reload();
   };
 
-  // 比分 + 暫停（若頁面上沒有這些按鈕，監聽不會觸發）
+  // 比分
   document.querySelectorAll('[data-add]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const [side,delta] = btn.dataset.add.split(':'); setScore(side, state[side].score + parseInt(delta,10));
     });
   });
-  document.querySelectorAll('[data-tos]').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const [side,delta] = btn.dataset.tos.split(':'); state[side].timeouts = Math.max(0, (state[side].timeouts|0) + parseInt(delta,10));
-      const el = document.getElementById(side+'TO'); if(el) el.textContent = state[side].timeouts; saveState();
-    });
-  });
-
-  // 團隊犯規
+  // 團隊犯規（手動）
   document.querySelectorAll('[data-tf]').forEach(btn=>{
     btn.addEventListener('click', ()=>{ const [side,delta] = btn.dataset.tf.split(':'); addTeamFoul(side, parseInt(delta,10)); });
   });
   const hfr=$('#homeFoulsReset'); if(hfr) hfr.onclick = ()=>{ state.home.teamFouls=0; renderTeamFouls('home'); };
   const afr=$('#awayFoulsReset'); if(afr) afr.onclick = ()=>{ state.away.teamFouls=0; renderTeamFouls('away'); };
 
-  // 節次（手動）
-  const pi=$('#periodInc'); if(pi) pi.onclick = ()=>{ state.period = (state.period|0)+1; if(state.period>4){ state.game.totalMs = 5*60*1000; } resetGameClock(); resetTeamFouls(); resetShot(24000, {autoRunIfLinked:true}); renderPeriod(); saveState(); };
-  const pd=$('#periodDec'); if(pd) pd.onclick = ()=>{ state.period = Math.max(1,(state.period|0)-1); if(state.period>4){ state.game.totalMs = 5*60*1000; } resetGameClock(); resetTeamFouls(); resetShot(24000, {autoRunIfLinked:true}); renderPeriod(); saveState(); };
+  // 節次
+  const pi=$('#periodInc'); if(pi) pi.onclick = ()=>{ state.period=(state.period|0)+1; if(state.period>4){ state.game.totalMs=5*60*1000; } resetGameClock(); resetTeamFouls(); resetShot(24000,{autoRunIfLinked:true}); renderPeriod(); saveState(); };
+  const pd=$('#periodDec'); if(pd) pd.onclick = ()=>{ state.period=Math.max(1,(state.period|0)-1); if(state.period>4){ state.game.totalMs=5*60*1000; } resetGameClock(); resetTeamFouls(); resetShot(24000,{autoRunIfLinked:true}); renderPeriod(); saveState(); };
 
-  // 比賽標題
+  // 標題
   const gt=$('#gameTitle'); if(gt) gt.addEventListener('input', e=>{ state.gameTitle = e.target.value; saveState(); });
 
   // Shot
   const ss=$('#shotStart'); if(ss) ss.onclick = ()=> startShot();
   const sp=$('#shotPause'); if(sp) sp.onclick = ()=> pauseShot();
-  const sr24=$('#shotReset24'); if(sr24) sr24.onclick = ()=> resetShot(24000, {autoRunIfLinked:true});
-  const sr14=$('#shotReset14'); if(sr14) sr14.onclick = ()=> resetShot(14000, {autoRunIfLinked:true});
-  const sm=$('#shotMinus'); if(sm) sm.onclick = ()=>{ state.shot.ms = Math.max(0, state.shot.ms-1000); updateShotUI(true); if(state.shot.running){ clearInterval(shotTimer); startShot();} };
-  const spm=$('#shotPlus'); if(spm) spm.onclick  = ()=>{ state.shot.ms = Math.min(24000, state.shot.ms+1000); updateShotUI(true); if(state.shot.running){ clearInterval(shotTimer); startShot();} };
-  const sswap=$('#shotSwap'); if(sswap) sswap.onclick  = ()=> { swapPossession(); if(state.game.linkShot && state.game.running) startShot(); };
+  const sr24=$('#shotReset24'); if(sr24) sr24.onclick = ()=> resetShot(24000,{autoRunIfLinked:true});
+  const sr14=$('#shotReset14'); if(sr14) sr14.onclick = ()=> resetShot(14000,{autoRunIfLinked:true});
+  const sm=$('#shotMinus'); if(sm) sm.onclick = ()=>{ state.shot.ms=Math.max(0,state.shot.ms-1000); updateShotUI(true); if(state.shot.running){ clearInterval(shotTimer); startShot();} };
+  const spm=$('#shotPlus'); if(spm) spm.onclick = ()=>{ state.shot.ms=Math.min(24000,state.shot.ms+1000); updateShotUI(true); if(state.shot.running){ clearInterval(shotTimer); startShot();} };
+  const sswap=$('#shotSwap'); if(sswap) sswap.onclick = ()=>{ swapPossession(); if(state.game.linkShot && state.game.running) startShot(); };
   const svi=$('#shotViolation'); if(svi) svi.onclick = ()=> shotViolationManual();
-  const qa14=$('#qaOffReb14'); if(qa14) qa14.onclick = ()=> resetShot(14000, {autoRunIfLinked:true});
-  const qa24=$('#qaChangePoss24'); if(qa24) qa24.onclick = ()=>{ swapPossession(); resetShot(24000, {autoRunIfLinked:true}); };
+  const qa14=$('#qaOffReb14'); if(qa14) qa14.onclick = ()=> resetShot(14000,{autoRunIfLinked:true});
+  const qa24=$('#qaChangePoss24'); if(qa24) qa24.onclick = ()=>{ swapPossession(); resetShot(24000,{autoRunIfLinked:true}); };
 
   // Game
   const gs=$('#gameStart'); if(gs) gs.onclick = ()=> startGame();
@@ -484,6 +535,34 @@ function bindEvents(){
   const s10=$('#set10'); if(s10) s10.onclick = ()=> setGameLength(10);
   const s5=$('#set5'); if(s5) s5.onclick  = ()=> setGameLength(5);
   const tl=$('#toggleLink'); if(tl) tl.onclick = ()=>{ state.game.linkShot = !state.game.linkShot; updateGameUI(true); };
+
+  // 規則設定
+  const syncRulesFromUI = ()=>{
+    state.rules.countCommon = $('#ruleCountCommon').checked;
+    state.rules.countOffensive = $('#ruleCountOffensive').checked;
+    state.rules.countTechnical = $('#ruleCountTechnical').checked;
+    state.rules.countUnsportsmanlike = $('#ruleCountUnsportsmanlike').checked;
+    saveState();
+  };
+  ['ruleCountCommon','ruleCountOffensive','ruleCountTechnical','ruleCountUnsportsmanlike'].forEach(id=>{
+    const el = document.getElementById(id); if(el) el.addEventListener('change', syncRulesFromUI);
+  });
+  const pfiba=$('#presetFIBA'); if(pfiba) pfiba.onclick = ()=>{
+    // 常見解讀：一般/違體 計入；進攻/技術 不計入
+    $('#ruleCountCommon').checked = true;
+    $('#ruleCountOffensive').checked = false;
+    $('#ruleCountTechnical').checked = false;
+    $('#ruleCountUnsportsmanlike').checked = true;
+    syncRulesFromUI();
+  };
+  const pnba=$('#presetNBA'); if(pnba) pnba.onclick = ()=>{
+    // 可依需要再調整；先與上方一致，避免誤導
+    $('#ruleCountCommon').checked = true;
+    $('#ruleCountOffensive').checked = false;
+    $('#ruleCountTechnical').checked = false;
+    $('#ruleCountUnsportsmanlike').checked = true;
+    syncRulesFromUI();
+  };
 }
 
 // ====== 啟動 ======
