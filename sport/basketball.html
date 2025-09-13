@@ -338,6 +338,39 @@
     <!-- 球員索引（比賽中 box score 快速面板） -->
     <div id="playersView" class="view">
       <section class="card">
+        
+        <!-- 篩選列 -->
+<div class="card mt12">
+  <div class="row" style="gap:12px; align-items:flex-end;">
+    <label style="min-width:220px;">隊伍
+      <select id="plFilterTeam">
+        <option value="all">全部</option>
+        <option value="home">主隊</option>
+        <option value="away">客隊</option>
+      </select>
+    </label>
+
+    <label style="min-width:220px;">位置
+      <select id="plFilterPos">
+        <option value="all">全部</option>
+        <option value="PG">PG</option>
+        <option value="SG">SG</option>
+        <option value="SF">SF</option>
+        <option value="PF">PF</option>
+        <option value="C">C</option>
+      </select>
+    </label>
+
+    <label class="row">
+      <input type="checkbox" id="plOnlyOncourt" />
+      <span class="label">只顯示上場</span>
+    </label>
+  </div>
+
+  <div class="divider"></div>
+  <div id="playersCards" class="players-cards"><!-- 動態卡片 --></div>
+</div>
+        
         <div class="row space-between">
           <div class="label">球員索引 / 新增球員</div>
           <span class="chip">犯(總)到上限自動標紅；T/U 到上限標記退場；勾選「上場」會累計上場時間</span>
