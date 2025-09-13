@@ -441,3 +441,30 @@ input[type="number"]{ -moz-appearance:textfield; }
 .players-cards .stat .value{ font:800 18px ui-monospace,Menlo,Consolas; }
 
 .players-cards .foul-max{ background:rgba(239,68,68,.15); border-color:var(--danger); }
+
+/* Players 索引：濾器條 */
+.players-filters select, .players-filters input{ min-width: 160px }
+
+/* 卡片牆沿用 dashboard 風格（你已經有 .players-cards 定義） */
+
+/* 上場 Switch */
+.switch{ position:relative; display:inline-block; width:52px; height:28px; }
+.switch input{ display:none; }
+.switch .slider{
+  position:absolute; inset:0; border-radius:999px;
+  background:#24314f; border:1px solid var(--line);
+  transition: all .18s ease;
+}
+.switch .slider::before{
+  content:""; position:absolute; height:22px; width:22px; left:3px; top:2px;
+  border-radius:50%; background:#c7d2fe; transition: transform .18s ease, background .18s ease;
+  box-shadow: 0 2px 8px rgba(0,0,0,.35);
+}
+.switch input:checked + .slider{
+  background: linear-gradient(180deg,#22c55e,#16a34a);
+  border-color: transparent;
+}
+.switch input:checked + .slider::before{
+  transform: translateX(24px); background:#fff;
+}
+
