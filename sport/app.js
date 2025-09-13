@@ -1,9 +1,12 @@
-// ====== 常數 ======
+/* =========================================================
+   Basket Scoreboard — App Logic (IndexedDB + UI behaviors)
+   ========================================================= */
+
 const DB_NAME = 'basket-scoreboard';
-const DB_VER  = 8; // 新：上場時間、罰球引導器、CSV/JSON 匯出
+const DB_VER  = 9; // v9: Player Admin (advanced), avatars, bulk import/export
 const BONUS_LIMIT = 5;
 
-// ====== IndexedDB ======
+/* ========== IndexedDB ========== */
 let db;
 function openDB(){
   return new Promise((resolve,reject)=>{
@@ -11,7 +14,7 @@ function openDB(){
     req.onupgradeneeded = (e)=>{
       const db = e.target.result;
       if(!db.objectStoreNames.contains('players')){
-        const s = db.createObjectStore('players',{ keyPath:'id' });
+        const s = db.createObjectStore('players',{ keyPath:'id' }); // id: `${team}#${number}`
         s.createIndex('team','team',{unique:false});
       }
       if(!db.objectStoreNames.contains('game')){
@@ -31,7 +34,7 @@ const get = (store,key)=>new Promise((res,rej)=>{ const r=tx(store).get(key); r.
 const del = (store,key)=>new Promise((res,rej)=>{ const r=tx(store,'readwrite').delete(key); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error); });
 const allPlayers = ()=>new Promise((res,rej)=>{ const r=tx('players').getAll(); r.onsuccess=()=>res(r.result||[]); r.onerror=()=>rej(r.error); });
 
-// ====== 狀態 ======
+/* ========== State ========== */
 const state = {
   gameTitle:'',
   period:1,
@@ -44,16 +47,13 @@ const state = {
     countUnsportsmanlike:true,
     limitPF:5, limitT:2, limitU:2
   },
-  // 裁判
   referees:{ crew:'', u1:'', u2:'' },
-  // 時計
   shot:{ ms:24000, running:false, lastTs:null, poss:'home' },
   game:{ ms:12*60*1000, totalMs:12*60*1000, running:false, lastTs:null, linkShot:false },
-  // UI
   ui:{ view:'scoreView' }
 };
 
-// 工具
+/* ========== Utilities ========== */
 const deepCopy = (o)=>JSON.parse(JSON.stringify(o));
 async function saveState(){ await put('game',{k:'state', v:deepCopy(state)}); }
 const $ = (sel)=>document.querySelector(sel);
@@ -62,18 +62,18 @@ const sideLabel = (t)=> t==='home'?'主隊':'客隊';
 const periodLabel = (n)=> n<=4 ? `第${n}節` : `OT${n-4}`;
 const fmtMin = (ms)=>{ const s=Math.floor(Math.max(0,ms)/1000); const m=Math.floor(s/60); const sec=s%60; return `${m}:${String(sec).padStart(2,'0')}`; };
 
-// ====== 初始化 ======
+/* ========== Init / Load ========== */
 async function loadState(){
   const saved = await get('game','state');
   if(saved){ Object.assign(state,saved.v||saved); }
-  $('#gameTitle') && ($('#gameTitle').value = state.gameTitle || '');
+  if($('#gameTitle')) $('#gameTitle').value = state.gameTitle || '';
   setScore('home', state.home.score);
   setScore('away', state.away.score);
   renderTeamFouls('home'); renderTeamFouls('away');
   renderPeriod();
   updateShotUI(true); updateGameUI(true);
 
-  // 規則 UI
+  // Rules
   $('#ruleCountCommon').checked = !!state.rules.countCommon;
   $('#ruleCountOffensive').checked = !!state.rules.countOffensive;
   $('#ruleCountTechnical').checked = !!state.rules.countTechnical;
@@ -82,7 +82,7 @@ async function loadState(){
   $('#limitT').value  = state.rules.limitT;
   $('#limitU').value  = state.rules.limitU;
 
-  // 裁判 UI
+  // Referees
   const R = state.referees || {};
   $('#refCrew') && ($('#refCrew').value = R.crew || '');
   $('#refU1') && ($('#refU1').value = R.u1 || '');
@@ -93,7 +93,7 @@ async function loadState(){
   if(state.game.running) startGame(true);
 }
 
-// ====== 節次 / 比分 ======
+/* ========== Period / Score ========== */
 function renderPeriod(){ const el=$('#period'); if(el) el.textContent = periodLabel(state.period); }
 function setScore(side, val){
   state[side].score = Math.max(0, val|0);
@@ -101,11 +101,11 @@ function setScore(side, val){
   saveState();
 }
 
-// ====== 團隊犯規 ======
+/* ========== Team Fouls ========== */
 function renderTeamFouls(side){
   const n = Math.max(0, state[side].teamFouls|0);
-  const foulEl = $('#'+side+'Fouls'); foulEl && (foulEl.textContent = n);
-  const bonusEl = $('#'+side+'Bonus'); bonusEl && (bonusEl.style.display = n>=BONUS_LIMIT?'inline-flex':'none');
+  const foulEl = $('#'+side+'Fouls'); if(foulEl) foulEl.textContent = n;
+  const bonusEl = $('#'+side+'Bonus'); if(bonusEl) bonusEl.style.display = n >= BONUS_LIMIT ? 'inline-flex' : 'none';
   saveState();
 }
 function addTeamFoul(side, delta){
@@ -117,16 +117,41 @@ function resetTeamFouls(){
   renderTeamFouls('home'); renderTeamFouls('away');
 }
 
-// ====== 球員（含上場時間） ======
+/* ========== Players (with advanced profile) ========== */
 function ensurePlayerShape(p){
+  // Base identity fields (for Admin page)
+  p.team = p.team || 'home';
+  p.number = Number(p.number||0);
+  p.nameZh = p.nameZh || p.name || ''; // backward compatible
+  p.nameEn = p.nameEn || '';
+  p.pos = p.pos || '';
+  p.role = p.role || 'bench';
+  p.height = Number(p.height||0);
+  p.weight = Number(p.weight||0);
+  p.dob = p.dob || ''; // YYYY-MM-DD
+  p.nationality = p.nationality || '';
+  p.hand = p.hand || 'R';
+  p.arc = p.arc || ''; // role/arc preference (3&D..)
+  p.numberStyle = p.numberStyle || '';
+  p.regId = p.regId || '';
+  p.email = p.email || '';
+  p.phone = p.phone || '';
+  p.avatar = p.avatar || ''; // dataURL or URL
+
+  // In-game stats (for Players view)
   p.PTS|=0; p.AST|=0; p.REB|=0; p.STL|=0; p.BLK|=0; p.TOV|=0;
   p.PF|=0; p.PFOFF|=0; p.PFT|=0; p.PFU|=0;
-  p.oncourt = !!p.oncourt;      // 是否在場
-  p.playMs = p.playMs|0;        // 累計上場毫秒
-  // 提醒旗標
+  p.oncourt = !!p.oncourt;
+  p.playMs = p.playMs|0;
+
+  // Alerts
   if(p.alertedPF===undefined) p.alertedPF=false;
   if(p.alertedT===undefined)  p.alertedT=false;
   if(p.alertedU===undefined)  p.alertedU=false;
+
+  // Legacy compat
+  if(p.name && !p.nameZh) p.nameZh = p.name;
+
   return p;
 }
 function needsFlag(p){
@@ -135,6 +160,8 @@ function needsFlag(p){
   const overU  = (p.PFU|0) >= (state.rules.limitU|0);
   return { overPF, overT, overU };
 }
+
+/* ===== Players View (box score quick panel) ===== */
 function trForPlayer(p0){
   const p = ensurePlayerShape(p0);
   const tr = document.createElement('tr'); tr.dataset.id=p.id;
@@ -145,7 +172,7 @@ function trForPlayer(p0){
   const cells = [
     ['team', p.team==='home'?'主隊':'客隊', false],
     ['number', p.number, true],
-    ['name', p.name||'', true],
+    ['nameZh', p.nameZh||'', true],
     ['pos', p.pos||'', true],
     ['PTS', p.PTS|0, false],
     ['PF',  p.PF|0,  false],
@@ -179,12 +206,12 @@ function trForPlayer(p0){
         }
         await put('players', ensurePlayerShape(rec));
         renderPlayers();
+        renderRoster(); // keep admin view in sync
       });
     }
     tr.appendChild(td);
   }
 
-  // 上場 & MIN
   const tdOn = document.createElement('td');
   const chk = document.createElement('input'); chk.type='checkbox'; chk.checked = !!p.oncourt;
   chk.addEventListener('change', async ()=>{
@@ -195,7 +222,6 @@ function trForPlayer(p0){
 
   const tdMin = document.createElement('td'); tdMin.className='mono'; tdMin.textContent = fmtMin(p.playMs); tr.appendChild(tdMin);
 
-  // 操作
   const op = document.createElement('td');
   const box = document.createElement('div'); box.className='opset';
   const mkBtn=(txt, cls, fn)=>{ const b=document.createElement('button'); b.textContent=txt; b.className='opbtn '+(cls||''); b.addEventListener('click', fn); return b; };
@@ -207,7 +233,7 @@ function trForPlayer(p0){
   box.appendChild(mkBtn('- 進攻',null, ()=> updatePersonalFoul(p.id,'offensive', -1)));
   box.appendChild(mkBtn('- 技',null, ()=> updatePersonalFoul(p.id,'technical', -1)));
   box.appendChild(mkBtn('- 違體',null, ()=> updatePersonalFoul(p.id,'unsportsmanlike', -1)));
-  box.appendChild(mkBtn('刪除',null, async ()=>{ await del('players', p.id); renderPlayers(); }));
+  box.appendChild(mkBtn('刪除','', async ()=>{ await del('players', p.id); renderPlayers(); renderRoster(); }));
   op.appendChild(box); tr.appendChild(op);
 
   return tr;
@@ -220,7 +246,7 @@ async function renderPlayers(){
   for(const p of players){ tbody.appendChild(trForPlayer(p)); }
 }
 
-// 上限提醒
+/* ===== Upper-limit alerts ===== */
 async function maybeAlertLimits(rec){
   const {overPF,overT,overU} = needsFlag(rec);
   let changed=false, msgs=[];
@@ -229,8 +255,6 @@ async function maybeAlertLimits(rec){
   if(overU && !rec.alertedU){ rec.alertedU=true; changed=true; msgs.push(`【退場條件】${sideLabel(rec.team)} #${rec.number} 違體犯規達上限（${state.rules.limitU}）。`); }
   if(changed){ await put('players', rec); alert(msgs.join('\n')); }
 }
-
-// 更新個人犯規 + 團犯 + 上限提醒
 async function updatePersonalFoul(playerId, type, delta){
   const rec = await get('players', playerId);
   if(!rec) return;
@@ -251,7 +275,7 @@ async function updatePersonalFoul(playerId, type, delta){
   renderPlayers();
 }
 
-// ====== Tabs ======
+/* ========== Tabs ========== */
 function setView(viewId){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById(viewId)?.classList.add('active');
@@ -260,7 +284,7 @@ function setView(viewId){
 }
 document.querySelectorAll('.tab').forEach(btn=> btn.addEventListener('click', ()=> setView(btn.dataset.view)));
 
-// ====== Shot Clock（>8s：整秒；≤8s：兩位小數） ======
+/* ========== Shot Clock ========== */
 let shotTimer = null, lastShownWhole = null;
 function fmtShot(ms){ const s=Math.max(0,ms)/1000; return s>8?String(Math.ceil(s|0)):s.toFixed(2); }
 function updateShotUI(force=false){
@@ -310,7 +334,7 @@ async function shotViolationAuto(){
 }
 async function shotViolationManual(){ pauseShot(); buzzer(); await shotViolationAuto(); }
 
-// ====== Game Clock（含上場時間累計） ======
+/* ========== Game Clock (with playtime accrual) ========== */
 let gameTimer = null, gameLastShownSec = null;
 function fmtGame(ms){
   const t = Math.max(0, ms|0), s = Math.floor(t/1000), m = Math.floor(s/60), sec = s%60;
@@ -324,7 +348,7 @@ async function accruePlaytime(elapsedMs){
   for(const p of players){
     if(p.oncourt){ p.playMs = (p.playMs|0) + elapsedMs; changed=true; await put('players', ensurePlayerShape(p)); }
   }
-  if(changed) renderPlayers();
+  if(changed){ renderPlayers(); renderRosterMINOnly(); }
 }
 function updateGameUI(force=false){
   const d=$('#gameDisplay'), info=$('#gameInfo'); if(!d||!info) return;
@@ -342,7 +366,6 @@ function startGame(){
   const tick=async ()=>{
     const now=performance.now(), elapsed=now-state.game.lastTs;
     state.game.lastTs=now; state.game.ms-=elapsed;
-    // 累計上場時間
     await accruePlaytime(elapsed);
     if(state.game.ms<=0){ state.game.ms=0; updateGameUI(true); clearInterval(gameTimer); gameTimer=null; state.game.running=false; buzzer(); nextPeriod(); }
     else{ updateGameUI(); }
@@ -359,13 +382,12 @@ function nextPeriod(){
   resetTeamFouls(); resetShot(24000,{autoRunIfLinked:true}); renderPeriod(); saveState();
 }
 
-// ====== 註記 & 事件 ======
+/* ========== Notes helper ========== */
 async function appendNote(text){
   const notes = $('#notes'); if(notes){ notes.value += (notes.value?'\r\n':'') + `【${new Date().toLocaleTimeString()}】` + text; }
   await saveState();
 }
 function sideOpp(side){ return side==='home'?'away':'home'; }
-
 function getEvtTarget(){
   const team = $('#evtTeam')?.value || 'home';
   const num  = parseInt($('#evtNum')?.value||'0',10);
@@ -373,8 +395,8 @@ function getEvtTarget(){
   return {team,num,id:idOf(team,num)};
 }
 
-// ====== 罰球引導器 ======
-const ft = { team:'home', attempts:2, results:[] }; // results: true=中, false=失手
+/* ========== Free Throw Helper ========== */
+const ft = { team:'home', attempts:2, results:[] };
 function openFT(team, attempts, titleNote){
   ft.team = team; ft.attempts = attempts; ft.results = new Array(attempts).fill(null);
   $('#ftInfo').textContent = `${sideLabel(team)} 罰球（${attempts} 次）${titleNote?`｜${titleNote}`:''}`;
@@ -400,7 +422,7 @@ function bindFT(){
   };
 }
 
-// ====== 事件面板（串起犯規 + 罰球引導器） ======
+/* ========== Event Panel binds ========== */
 async function eventAddFoul(playerId, type, note){
   await updatePersonalFoul(playerId, type, +1);
   await appendNote(note);
@@ -443,7 +465,7 @@ function bindEventPanel(){
   });
 }
 
-// ====== 匯出（TXT/CSV/JSON） ======
+/* ========== Export TXT / CSV / JSON ========== */
 function buildHeaderLines(){
   const L = [];
   L.push(`# ${state.gameTitle || '未命名比賽'}`);
@@ -467,7 +489,7 @@ function buildTxt(players){
   players.sort((a,b)=> (a.team===b.team?0:(a.team==='home'?-1:1)) || (a.number-b.number))
     .forEach(p=>{
       p=ensurePlayerShape(p);
-      const row=[p.team,p.number,p.name,p.pos,p.PTS|0,(p.PF|0),(p.PFOFF|0),(p.PFT|0),(p.PFU|0),p.AST|0,p.REB|0,p.STL|0,p.BLK|0,p.TOV|0,p.oncourt?1:0,fmtMin(p.playMs)];
+      const row=[p.team,p.number,p.nameZh||p.name||'',p.pos,p.PTS|0,(p.PF|0),(p.PFOFF|0),(p.PFT|0),(p.PFU|0),p.AST|0,p.REB|0,p.STL|0,p.BLK|0,p.TOV|0,p.oncourt?1:0,fmtMin(p.playMs)];
       L.push(row.join(','));
     });
   const notes = ($('#notes')?.value||'').trim();
@@ -487,7 +509,7 @@ function buildCSV(players){
   players.sort((a,b)=> (a.team===b.team?0:(a.team==='home'?-1:1)) || (a.number-b.number))
     .forEach(p=>{
       p=ensurePlayerShape(p);
-      rows.push([p.team,p.number,p.name,p.pos,p.PTS|0,(p.PF|0),(p.PFOFF|0),(p.PFT|0),(p.PFU|0),p.AST|0,p.REB|0,p.STL|0,p.BLK|0,p.TOV|0,p.oncourt?1:0,fmtMin(p.playMs)]);
+      rows.push([p.team,p.number,p.nameZh||p.name||'',p.pos,p.PTS|0,(p.PF|0),(p.PFOFF|0),(p.PFT|0),(p.PFU|0),p.AST|0,p.REB|0,p.STL|0,p.BLK|0,p.TOV|0,p.oncourt?1:0,fmtMin(p.playMs)]);
     });
   return rows.map(r=>r.join(',')).join('\r\n');
 }
@@ -503,17 +525,16 @@ function buildJSON(players){
       referees: state.referees
     },
     players: players.map(p=>({
-      team:p.team, number:p.number, name:p.name, pos:p.pos,
-      PTS:p.PTS|0, PF_total:p.PF|0, PF_off:p.PFOFF|0, PF_tech:p.PFT|0, PF_unspt:p.PFU|0,
-      AST:p.AST|0, REB:p.REB|0, STL:p.STL|0, BLK:p.BLK|0, TOV:p.TOV|0,
+      team:p.team, number:p.number, nameZh:p.nameZh||p.name||'', nameEn:p.nameEn||'',
+      pos:p.pos, role:p.role, height:p.height, weight:p.weight, dob:p.dob, nationality:p.nationality,
+      hand:p.hand, arc:p.arc, numberStyle:p.numberStyle, regId:p.regId, email:p.email, phone:p.phone, avatar:p.avatar||'',
+      stats:{ PTS:p.PTS|0, PF_total:p.PF|0, PF_off:p.PFOFF|0, PF_tech:p.PFT|0, PF_unspt:p.PFU|0, AST:p.AST|0, REB:p.REB|0, STL:p.STL|0, BLK:p.BLK|0, TOV:p.TOV|0 },
       on:p.oncourt?1:0, playMs:p.playMs|0, playMin:fmtMin(p.playMs)
     })),
     notes: ($('#notes')?.value||'').trim()
   };
   return JSON.stringify(obj, null, 2);
 }
-
-// 檔案存取（TXT 可覆寫；CSV/JSON 直接下載）
 async function getSavedHandle(){ const rec = await get('file','txtHandle'); return rec?.handle || null; }
 async function setSavedHandle(handle){ try{ if(handle?.requestPermission) await handle.requestPermission({mode:'readwrite'});}catch(e){} await put('file',{k:'txtHandle', handle}); }
 async function saveAsTxt(){
@@ -545,7 +566,7 @@ async function updateTxt(){
 async function saveAsCSV(){
   const players = (await allPlayers()).map(ensurePlayerShape);
   const csv = buildCSV(players);
-  const bom = '\ufeff'; // 讓 Excel 正確辨識 UTF-8
+  const bom = '\ufeff';
   const blob = new Blob([bom, csv], {type:'text/csv;charset=utf-8'});
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
   a.download = (state.gameTitle||'game') + '.csv'; a.click(); URL.revokeObjectURL(a.href);
@@ -558,40 +579,341 @@ async function saveAsJSON(){
   a.download = (state.gameTitle||'game') + '.json'; a.click(); URL.revokeObjectURL(a.href);
 }
 
-// ====== 綁定事件 ======
+/* ========== Player Admin (High-end) ========== */
+// form inputs
+const fm = {
+  team:     ()=>$('#fmTeam'),
+  number:   ()=>$('#fmNumber'),
+  nameZh:   ()=>$('#fmNameZh'),
+  nameEn:   ()=>$('#fmNameEn'),
+  pos:      ()=>$('#fmPos'),
+  role:     ()=>$('#fmRole'),
+  height:   ()=>$('#fmHeight'),
+  weight:   ()=>$('#fmWeight'),
+  dob:      ()=>$('#fmDob'),
+  nationality: ()=>$('#fmNationality'),
+  hand:     ()=>$('#fmHand'),
+  arc:      ()=>$('#fmArc'),
+  numberStyle: ()=>$('#fmNumberStyle'),
+  regId:    ()=>$('#fmRegId'),
+  email:    ()=>$('#fmEmail'),
+  phone:    ()=>$('#fmPhone'),
+  avatarFile: ()=>$('#fmAvatar'),
+  avatarUrl:  ()=>$('#fmAvatarUrl'),
+  avatarPreview: ()=>$('#fmAvatarPreview')
+};
+function clearPlayerForm(){
+  fm.team().value='home';
+  fm.number().value='';
+  fm.nameZh().value='';
+  fm.nameEn().value='';
+  fm.pos().value='PG';
+  fm.role().value='bench';
+  fm.height().value=''; fm.weight().value='';
+  fm.dob().value=''; fm.nationality().value='';
+  fm.hand().value='R'; fm.arc().value='';
+  fm.numberStyle().value=''; fm.regId().value='';
+  fm.email().value=''; fm.phone().value='';
+  fm.avatarFile().value=''; fm.avatarUrl().value='';
+  fm.avatarPreview().src='';
+}
+function fillPlayerForm(p){
+  p=ensurePlayerShape(p);
+  fm.team().value = p.team;
+  fm.number().value = p.number;
+  fm.nameZh().value = p.nameZh||'';
+  fm.nameEn().value = p.nameEn||'';
+  fm.pos().value = p.pos||'PG';
+  fm.role().value = p.role||'bench';
+  fm.height().value = p.height||'';
+  fm.weight().value = p.weight||'';
+  fm.dob().value = p.dob||'';
+  fm.nationality().value = p.nationality||'';
+  fm.hand().value = p.hand||'R';
+  fm.arc().value = p.arc||'';
+  fm.numberStyle().value = p.numberStyle||'';
+  fm.regId().value = p.regId||'';
+  fm.email().value = p.email||'';
+  fm.phone().value = p.phone||'';
+  fm.avatarPreview().src = p.avatar||'';
+}
+function readFileAsDataURL(file){
+  return new Promise((resolve,reject)=>{
+    const fr = new FileReader();
+    fr.onload = ()=> resolve(fr.result);
+    fr.onerror = reject;
+    fr.readAsDataURL(file);
+  });
+}
+async function resolveAvatarValue(){
+  const file = fm.avatarFile().files?.[0];
+  const url = fm.avatarUrl().value.trim();
+  if(file){ try{ return await readFileAsDataURL(file); }catch(e){ console.warn(e); } }
+  if(url){ return url; }
+  // if both empty, keep as is (empty string will be saved)
+  return '';
+}
+async function savePlayerFromForm(){
+  const team = fm.team().value || 'home';
+  const number = parseInt(fm.number().value||'0',10);
+  if(!number){ alert('請輸入背號（數字）'); return; }
+  const avatar = await resolveAvatarValue();
+  const rec = ensurePlayerShape({
+    id: idOf(team, number),
+    team, number,
+    nameZh: fm.nameZh().value.trim(),
+    nameEn: fm.nameEn().value.trim(),
+    pos: fm.pos().value,
+    role: fm.role().value,
+    height: parseInt(fm.height().value||'0',10)||0,
+    weight: parseInt(fm.weight().value||'0',10)||0,
+    dob: fm.dob().value || '',
+    nationality: fm.nationality().value.trim(),
+    hand: fm.hand().value,
+    arc: fm.arc().value,
+    numberStyle: fm.numberStyle().value.trim(),
+    regId: fm.regId().value.trim(),
+    email: fm.email().value.trim(),
+    phone: fm.phone().value.trim(),
+    avatar
+  });
+  // merge existing stats if present
+  const existed = await get('players', rec.id);
+  if(existed){
+    rec.PTS = existed.PTS|0; rec.AST = existed.AST|0; rec.REB = existed.REB|0; rec.STL = existed.STL|0; rec.BLK = existed.BLK|0; rec.TOV = existed.TOV|0;
+    rec.PF = existed.PF|0; rec.PFOFF = existed.PFOFF|0; rec.PFT = existed.PFT|0; rec.PFU = existed.PFU|0;
+    rec.oncourt = !!existed.oncourt; rec.playMs = existed.playMs|0;
+    rec.alertedPF = !!existed.alertedPF; rec.alertedT = !!existed.alertedT; rec.alertedU = !!existed.alertedU;
+  }
+  await put('players', rec);
+  alert('已儲存 / 更新球員');
+  renderPlayers(); renderRoster();
+}
+function rosterRow(p){
+  const tr = document.createElement('tr'); tr.dataset.id = p.id;
+  const td = (t)=>{ const x=document.createElement('td'); x.textContent=t; return x; };
+  tr.appendChild(td(p.team==='home'?'主':'客'));
+  tr.appendChild(td(p.number));
+  tr.appendChild(td(p.nameZh||''));
+  tr.appendChild(td(p.nameEn||''));
+  tr.appendChild(td(p.pos||''));
+  tr.appendChild(td(p.height?`${p.height}`:'')); 
+  tr.appendChild(td(p.weight?`${p.weight}`:'')); 
+  tr.appendChild(td(p.dob||'')); 
+  tr.appendChild(td(p.nationality||'')); 
+  tr.appendChild(td(p.role||'')); 
+  tr.appendChild(td(p.hand||'')); 
+  tr.appendChild(td(p.regId||''));
+  // contact (email/phone)
+  const tdContact = document.createElement('td');
+  tdContact.textContent = [p.email||'', p.phone||''].filter(Boolean).join(' / ');
+  tr.appendChild(tdContact);
+  // avatar
+  const tdAv = document.createElement('td');
+  if(p.avatar){
+    const img=document.createElement('img'); img.src=p.avatar; img.className='roster-avatar'; tdAv.appendChild(img);
+  }else{
+    tdAv.textContent='—';
+  }
+  tr.appendChild(tdAv);
+
+  // ops
+  const tdOp = document.createElement('td');
+  const box = document.createElement('div'); box.className='opset';
+  const mk=(txt,cls,fn)=>{ const b=document.createElement('button'); b.textContent=txt; b.className='opbtn '+(cls||''); b.onclick=fn; return b; };
+  box.appendChild(mk('編輯','btn-accent', async ()=>{ const rec=await get('players', p.id); if(rec){ fillPlayerForm(rec); setView('playerAdminView'); } }));
+  box.appendChild(mk('刪除','btn-danger', async ()=>{
+    if(confirm(`刪除 ${p.team==='home'?'主隊':'客隊'} #${p.number} ${p.nameZh||''}？`)){
+      await del('players', p.id); renderRoster(); renderPlayers();
+    }
+  }));
+  tdOp.appendChild(box);
+  tr.appendChild(tdOp);
+  return tr;
+}
+function applyRosterFilterKeyword(p, kw){
+  if(!kw) return true;
+  const k = kw.toLowerCase();
+  return [
+    p.team, String(p.number), p.nameZh||'', p.nameEn||'', p.pos||'', p.role||'', p.nationality||'', p.regId||''
+  ].some(v=> String(v).toLowerCase().includes(k));
+}
+async function renderRoster(){
+  const filterTeam = $('#filterTeam')?.value || 'all';
+  const kw = $('#filterKeyword')?.value?.trim() || '';
+  const list = (await allPlayers()).map(ensurePlayerShape)
+    .filter(p=> filterTeam==='all' ? true : p.team===filterTeam)
+    .filter(p=> applyRosterFilterKeyword(p, kw))
+    .sort((a,b)=> (a.team===b.team?0:(a.team==='home'?-1:1)) || (a.number-b.number));
+  const tb = $('#rosterTbl tbody'); if(!tb) return;
+  tb.innerHTML='';
+  list.forEach(p=> tb.appendChild(rosterRow(p)));
+}
+async function renderRosterMINOnly(){
+  // For frequent updates from game clock; only update MIN column in roster table for performance
+  const tb = $('#rosterTbl tbody'); if(!tb || !tb.children.length) return;
+  const map = new Map(); (await allPlayers()).forEach(p=> map.set(p.id, ensurePlayerShape(p)));
+  Array.from(tb.children).forEach(tr=>{
+    const id = tr.dataset.id; const p = map.get(id);
+    if(!p) return;
+    // MIN is column index where? We used: team,number,nameZh,nameEn,pos,height,weight,dob,nationality,role,hand,regId,contact,avatar,ops
+    // No MIN here: so nothing to update.
+    // If you later add a MIN col to roster, update here.
+  });
+}
+
+/* ===== Player Admin: CSV Export, Clear Roster ===== */
+function rosterToCSV(rows){
+  return rows.map(r=> r.map(x=>{
+    const s = (x==null?'':String(x));
+    return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g,'""')}"` : s;
+  }).join(',')).join('\r\n');
+}
+async function exportRosterCSV(){
+  const players = (await allPlayers()).map(ensurePlayerShape)
+    .sort((a,b)=> (a.team===b.team?0:(a.team==='home'?-1:1)) || (a.number-b.number));
+  const head = ['team','number','nameZh','nameEn','pos','height','weight','dob','nationality','role','hand','regId','email','phone','avatarUrl'];
+  const rows = [head];
+  players.forEach(p=>{
+    rows.push([p.team,p.number,p.nameZh||'',p.nameEn||'',p.pos||'',p.height||'',p.weight||'',p.dob||'',p.nationality||'',p.role||'',p.hand||'',p.regId||'',p.email||'',p.phone||'',p.avatar||'']);
+  });
+  const csv = rosterToCSV(rows);
+  const bom = '\ufeff';
+  const blob = new Blob([bom, csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'roster.csv'; a.click(); URL.revokeObjectURL(a.href);
+}
+async function clearRoster(){
+  if(!confirm('確定清空名單？（不影響比賽分數/時計，但會刪除所有球員資料）')) return;
+  const players = await allPlayers();
+  for(const p of players){ await del('players', p.id); }
+  renderRoster(); renderPlayers();
+}
+
+/* ===== Player Admin: Bulk Import (modal) ===== */
+function openBulk(){ $('#bulkModal').style.display='flex'; }
+function closeBulk(){ $('#bulkModal').style.display='none'; $('#bulkPaste').value=''; $('#bulkFile').value=''; $('#bulkHeadRow').innerHTML=''; $('#bulkBody').innerHTML=''; _bulkParsed=null; }
+let _bulkParsed = null;
+
+function parseCSV(text){
+  // robust-ish CSV parser (handles quotes)
+  const lines = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n').filter(l=>l.trim().length>0);
+  const rows = [];
+  for(const line of lines){
+    const out=[]; let i=0, cur='', inQ=false;
+    while(i<line.length){
+      const ch=line[i];
+      if(inQ){
+        if(ch==='"'){
+          if(i+1<line.length && line[i+1]==='"'){ cur+='"'; i+=2; }
+          else{ inQ=false; i++; }
+        }else{ cur+=ch; i++; }
+      }else{
+        if(ch===','){ out.push(cur); cur=''; i++; }
+        else if(ch==='"'){ inQ=true; i++; }
+        else{ cur+=ch; i++; }
+      }
+    }
+    out.push(cur);
+    rows.push(out);
+  }
+  return rows;
+}
+function previewBulk(rows){
+  const head = rows[0] || [];
+  const body = rows.slice(1);
+  const headRow = $('#bulkHeadRow'); const tbody = $('#bulkBody');
+  headRow.innerHTML=''; tbody.innerHTML='';
+  head.forEach(h=>{ const th=document.createElement('th'); th.textContent=h; headRow.appendChild(th); });
+  body.forEach(r=>{
+    const tr=document.createElement('tr');
+    r.forEach(c=>{ const td=document.createElement('td'); td.textContent=c; tr.appendChild(td); });
+    tbody.appendChild(tr);
+  });
+}
+function normalizeHeader(h){ return (h||'').trim().toLowerCase(); }
+function rowToPlayerObj(head, row){
+  const idx = (name)=> head.findIndex(h=> normalizeHeader(h)===normalizeHeader(name));
+  const take = (name)=> { const i=idx(name); return i>=0 ? row[i] : ''; };
+  const team = (take('team')||'home').toLowerCase()==='away'?'away':'home';
+  const number = parseInt(take('number')||'0',10)||0;
+  if(!number) return null;
+  return ensurePlayerShape({
+    id: idOf(team, number),
+    team, number,
+    nameZh: take('namezh') || take('name_zh') || take('name') || '',
+    nameEn: take('nameen') || take('name_en') || '',
+    pos: take('pos') || '',
+    height: parseInt(take('height')||'0',10)||0,
+    weight: parseInt(take('weight')||'0',10)||0,
+    dob: take('dob') || '',
+    nationality: take('nationality') || '',
+    role: take('role') || 'bench',
+    hand: (take('hand')||'R').toUpperCase()==='L'?'L':'R',
+    arc: take('arc') || '',
+    numberStyle: take('numberstyle') || '',
+    regId: take('regid') || '',
+    email: take('email') || '',
+    phone: take('phone') || '',
+    avatar: take('avatarurl') || ''
+  });
+}
+async function confirmBulkWrite(){
+  if(!_bulkParsed || !_bulkParsed.length){ alert('沒有可寫入的資料'); return; }
+  const head = _bulkParsed[0]; const rows=_bulkParsed.slice(1);
+  let count=0;
+  for(const r of rows){
+    const p = rowToPlayerObj(head, r);
+    if(!p) continue;
+    // merge existing in-game stats if existed
+    const existed = await get('players', p.id);
+    if(existed){
+      p.PTS = existed.PTS|0; p.AST = existed.AST|0; p.REB = existed.REB|0; p.STL = existed.STL|0; p.BLK = existed.BLK|0; p.TOV = existed.TOV|0;
+      p.PF = existed.PF|0; p.PFOFF = existed.PFOFF|0; p.PFT = existed.PFT|0; p.PFU = existed.PFU|0;
+      p.oncourt = !!existed.oncourt; p.playMs = existed.playMs|0;
+      p.alertedPF = !!existed.alertedPF; p.alertedT = !!existed.alertedT; p.alertedU = !!existed.alertedU;
+    }
+    await put('players', p);
+    count++;
+  }
+  alert(`已寫入 ${count} 筆球員資料`);
+  closeBulk(); renderRoster(); renderPlayers();
+}
+
+/* ========== Bindings ========== */
 function bindEvents(){
-  // 匯出
+  // Export
   $('#btnExport')?.addEventListener('click', saveAsTxt);
   $('#btnUpdate')?.addEventListener('click', updateTxt);
   $('#btnExportCSV')?.addEventListener('click', saveAsCSV);
   $('#btnExportJSON')?.addEventListener('click', saveAsJSON);
 
-  // 清空
+  // Reset ALL
   $('#btnReset')?.addEventListener('click', async ()=>{
-    if(!confirm('確定要清空本場資料？（球員與分數等將清空）')) return;
+    if(!confirm('確定要清空本場資料？（球員與分數/時計等將清空）')) return;
     db.close();
     await new Promise((res,rej)=>{ const delReq = indexedDB.deleteDatabase(DB_NAME); delReq.onsuccess=()=>res(); delReq.onerror=()=>rej(delReq.error); });
     await openDB(); location.reload();
   });
 
-  // 比分
+  // Score
   document.querySelectorAll('[data-add]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const [side,delta] = btn.dataset.add.split(':'); setScore(side, state[side].score + parseInt(delta,10));
     });
   });
-  // 團隊犯規（手動）
+  // Team fouls manual
   document.querySelectorAll('[data-tf]').forEach(btn=>{
     btn.addEventListener('click', ()=>{ const [side,delta] = btn.dataset.tf.split(':'); addTeamFoul(side, parseInt(delta,10)); });
   });
   $('#homeFoulsReset')?.addEventListener('click', ()=>{ state.home.teamFouls=0; renderTeamFouls('home'); });
   $('#awayFoulsReset')?.addEventListener('click', ()=>{ state.away.teamFouls=0; renderTeamFouls('away'); });
 
-  // 節次
+  // Period
   $('#periodInc')?.addEventListener('click', ()=>{ state.period=(state.period|0)+1; if(state.period>4){ state.game.totalMs=5*60*1000; } resetGameClock(); resetTeamFouls(); resetShot(24000,{autoRunIfLinked:true}); renderPeriod(); saveState(); });
   $('#periodDec')?.addEventListener('click', ()=>{ state.period=Math.max(1,(state.period|0)-1); if(state.period>4){ state.game.totalMs=5*60*1000; } resetGameClock(); resetTeamFouls(); resetShot(24000,{autoRunIfLinked:true}); renderPeriod(); saveState(); });
 
-  // 標題
+  // Title
   $('#gameTitle')?.addEventListener('input', e=>{ state.gameTitle = e.target.value; saveState(); });
 
   // Shot
@@ -615,7 +937,7 @@ function bindEvents(){
   $('#set5')?.addEventListener('click',  ()=> setGameLength(5));
   $('#toggleLink')?.addEventListener('click', ()=>{ state.game.linkShot = !state.game.linkShot; updateGameUI(true); });
 
-  // 規則設定
+  // Rules + Referees
   const syncRulesFromUI = ()=>{
     state.rules.countCommon = $('#ruleCountCommon').checked;
     state.rules.countOffensive = $('#ruleCountOffensive').checked;
@@ -624,7 +946,6 @@ function bindEvents(){
     state.rules.limitPF = Math.max(1,parseInt($('#limitPF').value||'5',10));
     state.rules.limitT  = Math.max(1,parseInt($('#limitT').value||'2',10));
     state.rules.limitU  = Math.max(1,parseInt($('#limitU').value||'2',10));
-    // 裁判
     state.referees.crew = $('#refCrew')?.value?.trim()||'';
     state.referees.u1   = $('#refU1')?.value?.trim()||'';
     state.referees.u2   = $('#refU2')?.value?.trim()||'';
@@ -651,15 +972,79 @@ function bindEvents(){
     syncRulesFromUI();
   });
 
-  // 事件面板 & 罰球引導器
+  // Event panel & Free throw
   bindEventPanel();
   bindFT();
+
+  /* Player Admin binds */
+  $('#btnSavePlayer')?.addEventListener('click', savePlayerFromForm);
+  $('#btnResetForm')?.addEventListener('click', clearPlayerForm);
+
+  // Avatar preview from file
+  fm.avatarFile()?.addEventListener('change', async ()=>{
+    const f = fm.avatarFile().files?.[0];
+    if(!f){ fm.avatarPreview().src=''; return; }
+    try{ fm.avatarPreview().src = await readFileAsDataURL(f); }catch(e){ console.warn(e); }
+  });
+  // Avatar preview from URL
+  fm.avatarUrl()?.addEventListener('input', ()=>{
+    const u = fm.avatarUrl().value.trim();
+    fm.avatarPreview().src = u || '';
+  });
+
+  // Roster filters
+  $('#filterTeam')?.addEventListener('change', renderRoster);
+  $('#filterKeyword')?.addEventListener('input', renderRoster);
+
+  // Bulk modal
+  $('#btnBulkImport')?.addEventListener('click', openBulk);
+  $('#bulkClose')?.addEventListener('click', closeBulk);
+  $('#bulkFile')?.addEventListener('change', async ()=>{
+    const f = $('#bulkFile').files?.[0]; if(!f) return;
+    const text = await f.text(); const rows = parseCSV(text); _bulkParsed = rows; previewBulk(rows);
+  });
+  $('#bulkParse')?.addEventListener('click', ()=>{
+    const txt = $('#bulkPaste').value.trim(); if(!txt){ alert('請貼上 CSV 內容或選擇檔案'); return; }
+    const rows = parseCSV(txt); _bulkParsed = rows; previewBulk(rows);
+  });
+  $('#bulkConfirm')?.addEventListener('click', confirmBulkWrite);
+
+  // Roster export & clear
+  $('#btnBulkExport')?.addEventListener('click', exportRosterCSV);
+  $('#btnClearRoster')?.addEventListener('click', clearRoster);
+
+  // Players quick add (Players view)
+  $('#addPlayer')?.addEventListener('click', async ()=>{
+    const num = parseInt($('#pNum').value||'0',10)||0;
+    const name = ($('#pName').value||'').trim();
+    const team = $('#pTeam').value || 'home';
+    const pos = ($('#pPos').value||'').trim();
+    if(!num){ alert('請輸入背號'); return; }
+    const rec = ensurePlayerShape({ id:idOf(team,num), team, number:num, nameZh:name, pos });
+    const existed = await get('players', rec.id);
+    if(existed){
+      // keep stats
+      rec.PTS=existed.PTS|0; rec.AST=existed.AST|0; rec.REB=existed.REB|0; rec.STL=existed.STL|0; rec.BLK=existed.BLK|0; rec.TOV=existed.TOV|0;
+      rec.PF=existed.PF|0; rec.PFOFF=existed.PFOFF|0; rec.PFT=existed.PFT|0; rec.PFU=existed.PFU|0;
+      rec.oncourt=!!existed.oncourt; rec.playMs=existed.playMs|0;
+      rec.alertedPF=!!existed.alertedPF; rec.alertedT=!!existed.alertedT; rec.alertedU=!!existed.alertedU;
+      // keep extended profile if name was empty from quick add
+      rec.nameEn=existed.nameEn||''; rec.height=existed.height||0; rec.weight=existed.weight||0; rec.dob=existed.dob||''; rec.nationality=existed.nationality||'';
+      rec.role=existed.role||'bench'; rec.hand=existed.hand||'R'; rec.arc=existed.arc||''; rec.numberStyle=existed.numberStyle||'';
+      rec.regId=existed.regId||''; rec.email=existed.email||''; rec.phone=existed.phone||''; rec.avatar=existed.avatar||'';
+    }
+    await put('players', rec);
+    renderPlayers(); renderRoster();
+    // clear quick inputs
+    $('#pNum').value=''; $('#pName').value=''; $('#pPos').value='';
+  });
 }
 
-// ====== 啟動 ======
+/* ========== Boot ========== */
 (async function init(){
   await openDB();
   await loadState();
   await renderPlayers();
+  await renderRoster();
   bindEvents();
 })();
