@@ -22,13 +22,14 @@
       <div class="tabs">
         <button class="tab active" data-view="scoreView">計分板</button>
         <button class="tab" data-view="playersView">球員索引</button>
+        <button class="tab" data-view="playerAdminView">球員管理</button>
         <button class="tab" data-view="rulesView">規則設定</button>
       </div>
     </div>
   </header>
 
   <main class="container main">
-    <!-- 計分板 View -->
+    <!-- 計分板 -->
     <div id="scoreView" class="view active">
       <div class="grid grid-3">
         <!-- Scoreboard + Team Fouls -->
@@ -117,7 +118,7 @@
           </div>
         </section>
 
-        <!-- Shot Clock + 事件面板 -->
+        <!-- Shot Clock + 事件 -->
         <section class="card">
           <div class="row space-between">
             <div class="label">進攻時計（24s / 14s）</div>
@@ -141,8 +142,8 @@
           <hr class="divider">
           <div class="label">快速情境</div>
           <div class="row">
-            <button id="qaOffReb14" title="進攻籃板後重置 14 秒">進攻籃板（14s）</button>
-            <button id="qaChangePoss24" title="防守籃板或失誤等換球權重置 24 秒">換球權（24s）</button>
+            <button id="qaOffReb14">進攻籃板（14s）</button>
+            <button id="qaChangePoss24">換球權（24s）</button>
           </div>
 
           <hr class="divider">
@@ -170,25 +171,12 @@
       </div>
     </div>
 
-    <!-- 球員索引 View -->
+    <!-- 球員索引（比賽用 Box Score） -->
     <div id="playersView" class="view">
       <section class="card">
         <div class="row space-between">
-          <div class="label">球員索引 / 新增球員</div>
-          <span class="chip">犯(總)到上限自動標紅；T/U 到上限標記退場；勾選「上場」會累計上場時間</span>
-        </div>
-        <div class="grid grid-2 mt8">
-          <input id="pNum" type="number" placeholder="背號（數字）"/>
-          <input id="pName" placeholder="姓名"/>
-          <select id="pTeam">
-            <option value="home">主隊</option>
-            <option value="away">客隊</option>
-          </select>
-          <input id="pPos" placeholder="位置（G/F/C）"/>
-        </div>
-        <div class="row mt8">
-          <button id="addPlayer" class="btn-accent">加入名單</button>
-          <span class="muted">重複背號會覆蓋該隊同背號。</span>
+          <div class="label">球員索引 / 比賽操作</div>
+          <span class="chip">PF/T/U 上限自動警示；勾選「上場」累計 MIN</span>
         </div>
 
         <div class="table-wrap">
@@ -208,7 +196,102 @@
       </section>
     </div>
 
-    <!-- 規則設定 View -->
+    <!-- NEW 球員管理（高階資料登入） -->
+    <div id="playerAdminView" class="view">
+      <section class="card">
+        <div class="row space-between">
+          <div class="label">球員管理（高階資料登入）</div>
+          <span class="chip">以「隊伍 + 背號」為唯一鍵；重複將覆蓋</span>
+        </div>
+
+        <div class="grid grid-3 mt12 player-form">
+          <label>隊伍
+            <select id="aTeam">
+              <option value="home">主隊</option>
+              <option value="away">客隊</option>
+            </select>
+          </label>
+          <label>背號
+            <input id="aNumber" type="number" min="0" placeholder="例：7" />
+          </label>
+          <label>場上角色
+            <select id="aRole">
+              <option value="starter">先發</option>
+              <option value="bench">替補</option>
+            </select>
+          </label>
+
+          <label>姓名（中文）
+            <input id="aNameZh" placeholder="例：王小明" />
+          </label>
+          <label>姓名（英文）
+            <input id="aNameEn" placeholder="例：Wang Xiaoming" />
+          </label>
+          <label>位置
+            <select id="aPos">
+              <option value="PG">PG</option><option value="SG">SG</option>
+              <option value="SF">SF</option><option value="PF">PF</option>
+              <option value="C">C</option>
+            </select>
+          </label>
+
+          <label>身高（cm）
+            <input id="aHeight" type="number" min="100" max="250" placeholder="例：180" />
+          </label>
+          <label>體重（kg）
+            <input id="aWeight" type="number" min="40" max="150" placeholder="例：75" />
+          </label>
+          <label>生日
+            <input id="aDob" type="date" />
+          </label>
+
+          <label>國籍
+            <input id="aNation" placeholder="例：TW / USA / JPN" />
+          </label>
+          <label>慣用手
+            <select id="aHand">
+              <option value="R">右手</option>
+              <option value="L">左手</option>
+              <option value="Both">雙手</option>
+            </select>
+          </label>
+          <label>個人備註
+            <input id="aNote" placeholder="自訂說明…" />
+          </label>
+
+          <label class="col-span-2">頭像（JPG/PNG）
+            <input id="aAvatar" type="file" accept="image/*" />
+          </label>
+          <div>
+            <div class="label">預覽</div>
+            <img id="aPreview" class="avatar" alt="預覽" />
+          </div>
+        </div>
+
+        <div class="row mt12">
+          <button id="btnSavePlayer" class="btn-accent">儲存 / 覆蓋</button>
+          <button id="btnClearForm" class="btn">清空表單</button>
+        </div>
+
+        <hr class="divider">
+        <div class="row space-between">
+          <div class="label">球員清單</div>
+          <input id="aSearch" placeholder="搜尋（背號/姓名/隊伍 home/away）" style="max-width:320px" />
+        </div>
+        <div class="table-wrap">
+          <table id="adminTbl">
+            <thead>
+              <tr>
+                <th>頭像</th><th>隊伍</th><th>背號</th><th>姓名</th><th>英文名</th><th>位置</th><th>身高</th><th>體重</th><th>國籍</th><th>手</th><th>角色</th><th>生日</th><th>備註</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody><!-- rows --></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <!-- 規則設定 -->
     <div id="rulesView" class="view">
       <section class="card">
         <div class="label">犯規計數規則（哪些算入團隊犯規）</div>
