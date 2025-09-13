@@ -688,49 +688,9 @@ async function savePlayerFromForm(){
   await put('players', rec);
   alert('已儲存 / 更新球員');
   renderPlayers(); renderRoster();
+  if (typeof window.renderPlayersCardsV2 === 'function') window.renderPlayersCardsV2();
 }
-function rosterRow(p){
-  const tr = document.createElement('tr'); tr.dataset.id = p.id;
-  const td = (t)=>{ const x=document.createElement('td'); x.textContent=t; return x; };
-  tr.appendChild(td(p.team==='home'?'主':'客'));
-  tr.appendChild(td(p.number));
-  tr.appendChild(td(p.nameZh||''));
-  tr.appendChild(td(p.nameEn||''));
-  tr.appendChild(td(p.pos||''));
-  tr.appendChild(td(p.height?`${p.height}`:'')); 
-  tr.appendChild(td(p.weight?`${p.weight}`:'')); 
-  tr.appendChild(td(p.dob||'')); 
-  tr.appendChild(td(p.nationality||'')); 
-  tr.appendChild(td(p.role||'')); 
-  tr.appendChild(td(p.hand||'')); 
-  tr.appendChild(td(p.regId||''));
-  // contact (email/phone)
-  const tdContact = document.createElement('td');
-  tdContact.textContent = [p.email||'', p.phone||''].filter(Boolean).join(' / ');
-  tr.appendChild(tdContact);
-  // avatar
-  const tdAv = document.createElement('td');
-  if(p.avatar){
-    const img=document.createElement('img'); img.src=p.avatar; img.className='roster-avatar'; tdAv.appendChild(img);
-  }else{
-    tdAv.textContent='—';
-  }
-  tr.appendChild(tdAv);
 
-  // ops
-  const tdOp = document.createElement('td');
-  const box = document.createElement('div'); box.className='opset';
-  const mk=(txt,cls,fn)=>{ const b=document.createElement('button'); b.textContent=txt; b.className='opbtn '+(cls||''); b.onclick=fn; return b; };
-  box.appendChild(mk('編輯','btn-accent', async ()=>{ const rec=await get('players', p.id); if(rec){ fillPlayerForm(rec); setView('playerAdminView'); } }));
-  box.appendChild(mk('刪除','btn-danger', async ()=>{
-    if(confirm(`刪除 ${p.team==='home'?'主隊':'客隊'} #${p.number} ${p.nameZh||''}？`)){
-      await del('players', p.id); renderRoster(); renderPlayers();
-    }
-  }));
-  tdOp.appendChild(box);
-  tr.appendChild(tdOp);
-  return tr;
-}
 function applyRosterFilterKeyword(p, kw){
   if(!kw) return true;
   const k = kw.toLowerCase();
@@ -788,6 +748,7 @@ async function clearRoster(){
   const players = await allPlayers();
   for(const p of players){ await del('players', p.id); }
   renderRoster(); renderPlayers();
+  if (typeof window.renderPlayersCardsV2 === 'function') window.renderPlayersCardsV2();
 }
 
 /* ===== Player Admin: Bulk Import (modal) ===== */
@@ -878,6 +839,7 @@ async function confirmBulkWrite(){
   }
   alert(`已寫入 ${count} 筆球員資料`);
   closeBulk(); renderRoster(); renderPlayers();
+  if (typeof window.renderPlayersCardsV2 === 'function') window.renderPlayersCardsV2();
 }
 
 /* ========== Bindings ========== */
@@ -1046,6 +1008,7 @@ function bindEvents(){
   await loadState();
   await renderPlayers();
   await renderRoster();
+  if (typeof window.renderPlayersCardsV2 === 'function') window.renderPlayersCardsV2();
   bindEvents();
 })();
 
@@ -1499,6 +1462,7 @@ function bindEvents(){
   function buildCard(p){
     const node = tpl().content.firstElementChild.cloneNode(true);
     node.dataset.pid = p.id;
+    node.dataset.team = p.team; 
     node.querySelector('.player-avatar').src = p.avatar || '';
     node.querySelector('.player-num').textContent = `#${p.number||0}`;
     node.querySelector('.team-chip').textContent = sideLabel(p.team);
