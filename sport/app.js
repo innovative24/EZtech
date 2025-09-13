@@ -1469,3 +1469,138 @@ function bindEvents(){
   window.renderPlayersCards = renderPlayersCards;
 })();
 
+/* =========================================================
+   Players 索引（純卡片 + 多條件篩選 + 卡內上場勾選）
+   ========================================================= */
+(function playersIndexV2(){
+  const $ = (s)=>document.querySelector(s);
+  const tpl = ()=> $('#pl2CardTpl');
+  const sideLabel = (t)=> t==='home'?'主隊':'客隊';
+  const fmtMin = (ms)=>{ const s=Math.floor(Math.max(0,ms)/1000); const m=Math.floor(s/60); const sec=s%60; return `${m}:${String(sec).padStart(2,'0')}`; };
+
+  let lightTimer=null; // 1s 輕量更新
+
+  function matchKeyword(p, kw){
+    if(!kw) return true;
+    const k = kw.toLowerCase();
+    return [
+      p.nameZh||'', p.nameEn||'', String(p.number||''), p.nationality||'', p.regId||''
+    ].some(v=> String(v).toLowerCase().includes(k));
+  }
+  function passFilter(p, team, pos, arc, role, kw){
+    if(team!=='all' && p.team!==team) return false;
+    if(pos!=='all' && (p.pos||'').toUpperCase()!==pos.toUpperCase()) return false;
+    if(arc!=='all'){ const a = (p.arc||''); if(arc==='' ? a!=='' : a!==arc) return false; }
+    if(role!=='all' && (p.role||'bench')!==role) return false;
+    if(!matchKeyword(p, kw)) return false;
+    return true;
+  }
+
+  function buildCard(p){
+    const node = tpl().content.firstElementChild.cloneNode(true);
+    node.dataset.pid = p.id;
+    node.querySelector('.player-avatar').src = p.avatar || '';
+    node.querySelector('.player-num').textContent = `#${p.number||0}`;
+    node.querySelector('.team-chip').textContent = sideLabel(p.team);
+    node.querySelector('.player-name').textContent = p.nameZh || p.nameEn || `球員 ${p.number||''}`;
+    node.querySelector('.player-meta').textContent = `${p.pos||''}｜上場：${fmtMin(p.playMs|0)}｜犯規：${p.PF|0}`;
+    const vals = node.querySelectorAll('.player-stats .value');
+    vals[0].textContent = p.PTS|0;
+    vals[1].textContent = p.REB|0;
+    vals[2].textContent = p.AST|0;
+
+    // 犯滿外觀
+    const over = (p.PF|0) >= (state?.rules?.limitPF|0 || 5);
+    node.classList.toggle('foul-max', over);
+
+    // 上場 switch
+    const onChk = node.querySelector('.oncheck');
+    onChk.checked = !!p.oncourt;
+    onChk.addEventListener('change', async (e)=>{
+      const rec = await get('players', p.id); if(!rec) return;
+      rec.oncourt = !!e.target.checked;
+      await put('players', ensurePlayerShape(rec));
+      // Dashboard 會在下一輪 heavy/light 更新抓到
+    });
+
+    // 點擊卡片空白處 → 打開管理（避免點到 switch）
+    node.addEventListener('click', (e)=>{
+      if(e.target.closest('.switch')) return;
+      try{
+        if(typeof fillPlayerForm==='function') fillPlayerForm(p);
+        if(typeof setView==='function') setView('playerAdminView');
+      }catch(err){}
+    });
+
+    return node;
+  }
+
+  async function renderCards(){
+    const wrap = $('#pl2Cards'); if(!wrap) return;
+    const team = $('#pl2Team')?.value || 'all';
+    const pos  = $('#pl2Pos')?.value  || 'all';
+    const arc  = $('#pl2Arc')?.value  || 'all';   // 'all' / '' / '3&D' / ...
+    const role = $('#pl2Role')?.value || 'all';   // 'all' / 'starter' / 'bench'
+    const kw   = ($('#pl2Keyword')?.value||'').trim();
+
+    const list = (await allPlayers()).map(ensurePlayerShape)
+      .filter(p=> passFilter(p, team, pos, arc, role, kw))
+      .sort((a,b)=> (a.team===b.team?0:(a.team==='home'?-1:1)) || (a.number-b.number));
+
+    wrap.innerHTML='';
+    list.forEach(p=> wrap.appendChild(buildCard(p)));
+  }
+
+  function lightUpdate(){
+    const wrap = $('#pl2Cards'); if(!wrap) return;
+    Array.from(wrap.children).forEach(async (card)=>{
+      const id = card.dataset.pid; if(!id) return;
+      const p = await get('players', id); if(!p) return;
+      const meta = card.querySelector('.player-meta');
+      if(meta) meta.textContent = `${p.pos||''}｜上場：${fmtMin(p.playMs|0)}｜犯規：${p.PF|0}`;
+      const vals = card.querySelectorAll('.player-stats .value');
+      if(vals[0]) vals[0].textContent = p.PTS|0;
+      if(vals[1]) vals[1].textContent = p.REB|0;
+      if(vals[2]) vals[2].textContent = p.AST|0;
+      // 犯滿外觀
+      const over = (p.PF|0) >= (state?.rules?.limitPF|0 || 5);
+      card.classList.toggle('foul-max', over);
+      // switch 同步（避免別處改動）
+      const onChk = card.querySelector('.oncheck');
+      if(onChk) onChk.checked = !!p.oncourt;
+    });
+  }
+
+  function bindFilters(){
+    ['pl2Team','pl2Pos','pl2Arc','pl2Role','pl2Keyword'].forEach(id=>{
+      document.getElementById(id)?.addEventListener('input', renderCards);
+      document.getElementById(id)?.addEventListener('change', renderCards);
+    });
+  }
+
+  // 切換到 playersView 時啟動；離開時關閉輕量更新
+  if(typeof setView==='function'){
+    const _origSetView = setView;
+    window.setView = function(viewId){
+      _origSetView(viewId);
+      if(viewId==='playersView'){
+        renderCards();
+        if(lightTimer) clearInterval(lightTimer);
+        lightTimer = setInterval(lightUpdate, 1000);
+      }else{
+        if(lightTimer) { clearInterval(lightTimer); lightTimer=null; }
+      }
+    };
+  }
+
+  // 如果一開始就在 playersView
+  if(document.querySelector('#playersView.view.active')){
+    renderCards();
+    lightTimer = setInterval(lightUpdate, 1000);
+  }
+
+  bindFilters();
+  // 暴露手動刷新
+  window.renderPlayersCardsV2 = renderCards;
+})();
+
