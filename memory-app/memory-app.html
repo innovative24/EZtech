@@ -339,12 +339,32 @@
     document.getElementById('btnExport').addEventListener('click', async ()=>{
   const all = await getAllRecipes();
   const json = JSON.stringify({version:1, items:all}, null, 2);
-  // 在前面加 BOM，並且宣告 charset，避免某些系統顯示亂碼
   const bom = '\uFEFF';
   const blob = new Blob([bom, json], {type:'application/json; charset=utf-8'});
+  const fileName = `recipes-${new Date().toISOString().slice(0,10)}.json`;
+
+  // 嘗試使用 Web Share API
+  if (navigator.canShare && navigator.canShare({ files: [new File([blob], fileName, { type: 'application/json' })] })) {
+    try {
+      const file = new File([blob], fileName, { type: 'application/json' });
+      await navigator.share({
+        title: '匯出的食譜資料',
+        text: '這是我從食譜 App 匯出的資料',
+        files: [file],
+      });
+      console.log('分享成功');
+      return;
+    } catch (err) {
+      console.error('分享失敗：', err);
+      alert('分享取消或失敗');
+      return;
+    }
+  }
+
+  // 如果不支援 Web Share，就退回下載方式
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = `recipes-${new Date().toISOString().slice(0,10)}.json`;
+  a.href = url; a.download = fileName;
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
 });
