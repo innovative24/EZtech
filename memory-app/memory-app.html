@@ -337,14 +337,17 @@
     document.getElementById('btnReset').addEventListener('click', resetForm);
     document.getElementById('btnAdd').addEventListener('click', resetForm);
     document.getElementById('btnExport').addEventListener('click', async ()=>{
-      const all = await getAllRecipes();
-      const blob = new Blob([JSON.stringify({version:1, items:all}, null, 2)], {type:'application/json'});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = `recipes-${new Date().toISOString().slice(0,10)}.json`;
-      document.body.appendChild(a); a.click(); a.remove();
-      URL.revokeObjectURL(url);
-    });
+  const all = await getAllRecipes();
+  const json = JSON.stringify({version:1, items:all}, null, 2);
+  // 在前面加 BOM，並且宣告 charset，避免某些系統顯示亂碼
+  const bom = '\uFEFF';
+  const blob = new Blob([bom, json], {type:'application/json; charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `recipes-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+});
 
     importFileEl.addEventListener('change', async ()=>{
       const file = importFileEl.files?.[0];
