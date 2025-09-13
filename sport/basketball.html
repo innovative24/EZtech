@@ -12,6 +12,8 @@
       <h1>🏀 籃球計分板</h1>
       <div class="row">
         <button id="btnExport" class="btn">匯出 TXT</button>
+        <button id="btnExportCSV" class="btn">匯出 CSV</button>
+        <button id="btnExportJSON" class="btn">匯出 JSON</button>
         <button id="btnUpdate" class="btn-accent">更新（覆寫同檔）</button>
         <button id="btnReset" class="btn-danger">清空本場</button>
       </div>
@@ -162,7 +164,7 @@
             <button id="evUnsports" class="opbtn btn-warn">違體犯規（U）</button>
           </div>
 
-          <div class="label mt12">備註（可寫入TXT）</div>
+          <div class="label mt12">備註（可寫入TXT/CSV/JSON）</div>
           <textarea id="notes" rows="6" placeholder="例：第三節 05:22 主隊 10:0 攻勢，#7 三分追平"></textarea>
         </section>
       </div>
@@ -173,7 +175,7 @@
       <section class="card">
         <div class="row space-between">
           <div class="label">球員索引 / 新增球員</div>
-          <span class="chip">犯(總)達上限自動標紅；T/U 到上限標記退場</span>
+          <span class="chip">犯(總)到上限自動標紅；T/U 到上限標記退場；勾選「上場」會累計上場時間</span>
         </div>
         <div class="grid grid-2 mt8">
           <input id="pNum" type="number" placeholder="背號（數字）"/>
@@ -196,6 +198,7 @@
                 <th>隊伍</th><th>背號</th><th>姓名</th><th>位置</th>
                 <th>分</th><th>犯(總)</th><th>進攻</th><th>技</th><th>違體</th>
                 <th>助</th><th>板</th><th>抄</th><th>阻</th><th>失</th>
+                <th>上場</th><th>MIN</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -227,7 +230,7 @@
           <button id="presetNBA">NBA 預設</button>
           <span class="muted">（勾選與上限可依賽制微調）</span>
         </div>
-                <!-- NEW: 裁判資訊 -->
+
         <hr class="divider">
         <div class="label">裁判資訊（本場執行裁判）</div>
         <div class="grid grid-2 mt12">
@@ -244,6 +247,22 @@
       </section>
     </div>
   </main>
+
+  <!-- 罰球引導器 Modal -->
+  <div id="ftModal" class="modal" style="display:none">
+    <div class="modal-box">
+      <div class="row space-between">
+        <div class="label">罰球引導器</div>
+        <button id="ftClose">✕</button>
+      </div>
+      <div id="ftInfo" class="mt8 muted"></div>
+      <div id="ftShots" class="ft-shots mt12"><!-- buttons --></div>
+      <div class="row mt12 center">
+        <button id="ftReset" class="btn">重置本次</button>
+        <button id="ftDone" class="btn-accent">完成</button>
+      </div>
+    </div>
+  </div>
 
   <script src="./app.js"></script>
 </body>
