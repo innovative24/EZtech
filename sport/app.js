@@ -42,21 +42,27 @@ const state = {
   ui:{ view:'scoreView' }
 };
 
-async function saveState(){ await put('game',{k:'state', v:structuredClone(state)}); }
+// 安全 deep copy（取代 structuredClone）
+function deepCopy(obj){ return JSON.parse(JSON.stringify(obj)); }
+async function saveState(){ await put('game',{k:'state', v:deepCopy(state)}); }
 function idOf(team,num){ return `${team}#${num}`; }
 function periodLabel(n){ return n<=4 ? `第${n}節` : `OT${n-4}`; }
 
 // ====== 初始化 ======
+const $ = (sel)=>document.querySelector(sel);
+
 async function loadState(){
   const saved = await get('game','state');
   if(saved){ Object.assign(state,saved.v); }
-  // 初始化 UI
-  $('#gameTitle').value = state.gameTitle || '';
+  // 初始化 UI（有元素才更新，避免空指標）
+  const titleEl = $('#gameTitle'); if(titleEl) titleEl.value = state.gameTitle || '';
   setScore('home', state.home.score);
   setScore('away', state.away.score);
   renderTeamFouls('home'); renderTeamFouls('away');
-  $('#homeTO').textContent = state.home.timeouts;
-  $('#awayTO').textContent = state.away.timeouts;
+
+  const homeTOEl = $('#homeTO'); if(homeTOEl) homeTOEl.textContent = state.home.timeouts;
+  const awayTOEl = $('#awayTO'); if(awayTOEl) awayTOEl.textContent = state.away.timeouts;
+
   renderPeriod();
   updateShotUI(true);
   updateGameUI(true);
@@ -65,23 +71,19 @@ async function loadState(){
   if(state.game.running) startGame(true);
 }
 
-// 小幫手
-const $ = (sel)=>document.querySelector(sel);
-
 // ====== 節次 / 比分 ======
-function renderPeriod(){ $('#period').textContent = periodLabel(state.period); }
+function renderPeriod(){ const el=$('#period'); if(el) el.textContent = periodLabel(state.period); }
 function setScore(side, val){
   state[side].score = Math.max(0, val|0);
-  $('#'+side+'Score').textContent = state[side].score;
+  const el = $('#'+side+'Score'); if(el) el.textContent = state[side].score;
   saveState();
 }
 
 // ====== 團隊犯規 ======
 function renderTeamFouls(side){
   const n = Math.max(0, state[side].teamFouls|0);
-  $('#'+side+'Fouls').textContent = n;
-  const bonusEl = $('#'+side+'Bonus');
-  bonusEl.style.display = n >= BONUS_LIMIT ? 'inline-flex' : 'none';
+  const foulEl = $('#'+side+'Fouls'); if(foulEl) foulEl.textContent = n;
+  const bonusEl = $('#'+side+'Bonus'); if(bonusEl) bonusEl.style.display = n >= BONUS_LIMIT ? 'inline-flex' : 'none';
   saveState();
 }
 function addTeamFoul(side, delta){
@@ -160,7 +162,7 @@ function trForPlayer(p){
 }
 async function renderPlayers(){
   const players = await allPlayers();
-  const tbody = $('#playersTbl tbody');
+  const tbody = document.querySelector('#playersTbl tbody');
   if(!tbody) return;
   tbody.innerHTML='';
   players.sort((a,b)=> (a.team===b.team?0:(a.team==='home'?-1:1)) || (a.number-b.number));
@@ -170,7 +172,7 @@ async function renderPlayers(){
 // ====== Tabs ======
 function setView(viewId){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-  $('#'+viewId).classList.add('active');
+  const view = document.getElementById(viewId); if(view) view.classList.add('active');
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.view===viewId));
   state.ui.view = viewId; saveState();
 }
@@ -178,7 +180,7 @@ document.querySelectorAll('.tab').forEach(btn=>{
   btn.addEventListener('click', ()=> setView(btn.dataset.view));
 });
 
-// ====== Shot Clock（>8s：整秒；≤8s：兩位小數） ======
+// ====== Shot Clock ======
 let shotTimer = null, lastShownWhole = null;
 function fmtShot(ms){
   const s = Math.max(0, ms)/1000;
@@ -186,8 +188,9 @@ function fmtShot(ms){
   return s.toFixed(2);
 }
 function updateShotUI(force=false){
-  const d = $('#shotDisplay');
-  const pos = $('#shotPos');
+  const d = document.getElementById('shotDisplay');
+  const pos = document.getElementById('shotPos');
+  if(!d || !pos) return;
   const s = state.shot.ms/1000;
   d.classList.toggle('shot-danger', s<=8);
   if(s>8 && !force){
@@ -259,15 +262,15 @@ function swapPossession(){
 }
 async function shotViolationAuto(){
   const team = state.shot.poss;
-  const notes = $('#notes');
-  notes.value += (notes.value?'\r\n':'') + `【${new Date().toLocaleTimeString()}】${team==='home'?'主隊':'客隊'} 24秒違例`;
+  const notes = document.getElementById('notes');
+  if(notes) notes.value += (notes.value?'\r\n':'') + `【${new Date().toLocaleTimeString()}】${team==='home'?'主隊':'客隊'} 24秒違例`;
   swapPossession();
   resetShot(24000, {autoRunIfLinked:true});
   await saveState();
 }
 async function shotViolationManual(){ pauseShot(); buzzer(); await shotViolationAuto(); }
 
-// ====== Game Clock（比賽時計） ======
+// ====== Game Clock ======
 let gameTimer = null, gameLastShownSec = null;
 function fmtGame(ms){
   const t = Math.max(0, ms|0);
@@ -277,13 +280,14 @@ function fmtGame(ms){
   if(s >= 60){
     return `${String(m).padStart(1,'0')}:${String(sec).padStart(2,'0')}`;
   }else{
-    const hundred = Math.floor((t%1000)/10); // 兩位小數（百分之一秒）
+    const hundred = Math.floor((t%1000)/10);
     return `${String(m).padStart(1,'0')}:${String(sec).padStart(2,'0')}.${String(hundred).padStart(2,'0')}`;
   }
 }
 function updateGameUI(force=false){
-  const d = $('#gameDisplay');
-  const info = $('#gameInfo');
+  const d = document.getElementById('gameDisplay');
+  const info = document.getElementById('gameInfo');
+  if(!d || !info) return;
   const s = Math.floor(state.game.ms/1000);
   d.classList.toggle('game-danger', s<60);
   if(s>=60 && !force){
@@ -292,7 +296,8 @@ function updateGameUI(force=false){
   }
   d.textContent = fmtGame(state.game.ms);
   info.textContent = `長度：${fmtGame(state.game.totalMs)}`;
-  $('#toggleLink').textContent = `與 24s 連動：${state.game.linkShot?'開':'關'}`;
+  const linkBtn = document.getElementById('toggleLink');
+  if(linkBtn) linkBtn.textContent = `與 24s 連動：${state.game.linkShot?'開':'關'}`;
   saveState();
 }
 function startGame(){
@@ -368,7 +373,7 @@ function buildTxt(players){
   L.push('Team,Number,Name,Pos,PTS,PF,AST,REB,STL,BLK,TOV');
   players.sort((a,b)=> (a.team===b.team?0:(a.team==='home'?-1:1)) || (a.number-b.number))
     .forEach(p=>L.push(`${p.team},${p.number},${p.name},${p.pos},${p.PTS|0},${p.PF|0},${p.AST|0},${p.REB|0},${p.STL|0},${p.BLK|0},${p.TOV|0}`));
-  const notes = ($('#notes')?.value||'').trim();
+  const notes = (document.getElementById('notes')?.value||'').trim();
   if(notes){ L.push(''); L.push('--- Notes ---'); L.push(notes); }
   return L.join('\r\n');
 }
@@ -420,11 +425,11 @@ async function updateTxt(){
 // ====== 事件綁定 ======
 function bindEvents(){
   // 匯出
-  $('#btnExport').onclick = saveAsTxt;
-  $('#btnUpdate').onclick = updateTxt;
+  const be=$('#btnExport'); if(be) be.onclick = saveAsTxt;
+  const bu=$('#btnUpdate'); if(bu) bu.onclick = updateTxt;
 
   // 重置整場
-  $('#btnReset').onclick = async ()=>{
+  const br=$('#btnReset'); if(br) br.onclick = async ()=>{
     if(!confirm('確定要清空本場資料？（球員與分數等將清空）')) return;
     db.close();
     await new Promise((res,rej)=>{ const delReq = indexedDB.deleteDatabase(DB_NAME); delReq.onsuccess=()=>res(); delReq.onerror=()=>rej(delReq.error); });
@@ -432,7 +437,7 @@ function bindEvents(){
     location.reload();
   };
 
-  // 比分 + 暫停
+  // 比分 + 暫停（若頁面上沒有這些按鈕，監聽不會觸發）
   document.querySelectorAll('[data-add]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const [side,delta] = btn.dataset.add.split(':'); setScore(side, state[side].score + parseInt(delta,10));
@@ -441,7 +446,7 @@ function bindEvents(){
   document.querySelectorAll('[data-tos]').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       const [side,delta] = btn.dataset.tos.split(':'); state[side].timeouts = Math.max(0, (state[side].timeouts|0) + parseInt(delta,10));
-      $('#'+side+'TO').textContent = state[side].timeouts; saveState();
+      const el = document.getElementById(side+'TO'); if(el) el.textContent = state[side].timeouts; saveState();
     });
   });
 
@@ -449,54 +454,36 @@ function bindEvents(){
   document.querySelectorAll('[data-tf]').forEach(btn=>{
     btn.addEventListener('click', ()=>{ const [side,delta] = btn.dataset.tf.split(':'); addTeamFoul(side, parseInt(delta,10)); });
   });
-  $('#homeFoulsReset').onclick = ()=>{ state.home.teamFouls=0; renderTeamFouls('home'); };
-  $('#awayFoulsReset').onclick = ()=>{ state.away.teamFouls=0; renderTeamFouls('away'); };
+  const hfr=$('#homeFoulsReset'); if(hfr) hfr.onclick = ()=>{ state.home.teamFouls=0; renderTeamFouls('home'); };
+  const afr=$('#awayFoulsReset'); if(afr) afr.onclick = ()=>{ state.away.teamFouls=0; renderTeamFouls('away'); };
 
   // 節次（手動）
-  $('#periodInc').onclick = ()=>{ state.period = (state.period|0)+1; if(state.period>4){ state.game.totalMs = 5*60*1000; } resetGameClock(); resetTeamFouls(); resetShot(24000, {autoRunIfLinked:true}); renderPeriod(); saveState(); };
-  $('#periodDec').onclick = ()=>{ state.period = Math.max(1,(state.period|0)-1); if(state.period>4){ state.game.totalMs = 5*60*1000; } resetGameClock(); resetTeamFouls(); resetShot(24000, {autoRunIfLinked:true}); renderPeriod(); saveState(); };
+  const pi=$('#periodInc'); if(pi) pi.onclick = ()=>{ state.period = (state.period|0)+1; if(state.period>4){ state.game.totalMs = 5*60*1000; } resetGameClock(); resetTeamFouls(); resetShot(24000, {autoRunIfLinked:true}); renderPeriod(); saveState(); };
+  const pd=$('#periodDec'); if(pd) pd.onclick = ()=>{ state.period = Math.max(1,(state.period|0)-1); if(state.period>4){ state.game.totalMs = 5*60*1000; } resetGameClock(); resetTeamFouls(); resetShot(24000, {autoRunIfLinked:true}); renderPeriod(); saveState(); };
 
   // 比賽標題
-  $('#gameTitle').addEventListener('input', e=>{ state.gameTitle = e.target.value; saveState(); });
+  const gt=$('#gameTitle'); if(gt) gt.addEventListener('input', e=>{ state.gameTitle = e.target.value; saveState(); });
 
   // Shot
-  $('#shotStart').onclick = ()=> startShot();
-  $('#shotPause').onclick = ()=> pauseShot();
-  $('#shotReset24').onclick = ()=> resetShot(24000, {autoRunIfLinked:true});
-  $('#shotReset14').onclick = ()=> resetShot(14000, {autoRunIfLinked:true});
-  $('#shotMinus').onclick = ()=>{ state.shot.ms = Math.max(0, state.shot.ms-1000); updateShotUI(true); if(state.shot.running){ clearInterval(shotTimer); startShot();} };
-  $('#shotPlus').onclick  = ()=>{ state.shot.ms = Math.min(24000, state.shot.ms+1000); updateShotUI(true); if(state.shot.running){ clearInterval(shotTimer); startShot();} };
-  $('#shotSwap').onclick  = ()=> { swapPossession(); if(state.game.linkShot && state.game.running) startShot(); };
-  $('#shotViolation').onclick = ()=> shotViolationManual();
-  $('#qaOffReb14').onclick = ()=> resetShot(14000, {autoRunIfLinked:true});
-  $('#qaChangePoss24').onclick = ()=>{ swapPossession(); resetShot(24000, {autoRunIfLinked:true}); };
+  const ss=$('#shotStart'); if(ss) ss.onclick = ()=> startShot();
+  const sp=$('#shotPause'); if(sp) sp.onclick = ()=> pauseShot();
+  const sr24=$('#shotReset24'); if(sr24) sr24.onclick = ()=> resetShot(24000, {autoRunIfLinked:true});
+  const sr14=$('#shotReset14'); if(sr14) sr14.onclick = ()=> resetShot(14000, {autoRunIfLinked:true});
+  const sm=$('#shotMinus'); if(sm) sm.onclick = ()=>{ state.shot.ms = Math.max(0, state.shot.ms-1000); updateShotUI(true); if(state.shot.running){ clearInterval(shotTimer); startShot();} };
+  const spm=$('#shotPlus'); if(spm) spm.onclick  = ()=>{ state.shot.ms = Math.min(24000, state.shot.ms+1000); updateShotUI(true); if(state.shot.running){ clearInterval(shotTimer); startShot();} };
+  const sswap=$('#shotSwap'); if(sswap) sswap.onclick  = ()=> { swapPossession(); if(state.game.linkShot && state.game.running) startShot(); };
+  const svi=$('#shotViolation'); if(svi) svi.onclick = ()=> shotViolationManual();
+  const qa14=$('#qaOffReb14'); if(qa14) qa14.onclick = ()=> resetShot(14000, {autoRunIfLinked:true});
+  const qa24=$('#qaChangePoss24'); if(qa24) qa24.onclick = ()=>{ swapPossession(); resetShot(24000, {autoRunIfLinked:true}); };
 
   // Game
-  $('#gameStart').onclick = ()=> startGame();
-  $('#gamePause').onclick = ()=> pauseGame();
-  $('#gameReset').onclick = ()=> resetGameClock();
-  $('#set12').onclick = ()=> setGameLength(12);
-  $('#set10').onclick = ()=> setGameLength(10);
-  $('#set5').onclick  = ()=> setGameLength(5);
-  $('#toggleLink').onclick = ()=>{ state.game.linkShot = !state.game.linkShot; updateGameUI(true); };
-
-  // 新增球員（索引分頁）
-  const addPlayerBtn = $('#addPlayer');
-  if(addPlayerBtn){
-    addPlayerBtn.onclick = async ()=>{
-      const number = parseInt($('#pNum').value||'0',10);
-      const name   = $('#pName').value.trim();
-      const team   = $('#pTeam').value;
-      const pos    = $('#pPos').value.trim();
-      if(!number || !name){ alert('請輸入背號與姓名'); return; }
-      const id = idOf(team, number);
-      const base = await get('players', id) || { id, team, number, name:'', pos:'', PTS:0, PF:0, AST:0, REB:0, STL:0, BLK:0, TOV:0 };
-      base.name=name; base.pos=pos;
-      await put('players', base);
-      $('#pNum').value=''; $('#pName').value=''; $('#pPos').value='';
-      renderPlayers();
-    };
-  }
+  const gs=$('#gameStart'); if(gs) gs.onclick = ()=> startGame();
+  const gp=$('#gamePause'); if(gp) gp.onclick = ()=> pauseGame();
+  const gr=$('#gameReset'); if(gr) gr.onclick = ()=> resetGameClock();
+  const s12=$('#set12'); if(s12) s12.onclick = ()=> setGameLength(12);
+  const s10=$('#set10'); if(s10) s10.onclick = ()=> setGameLength(10);
+  const s5=$('#set5'); if(s5) s5.onclick  = ()=> setGameLength(5);
+  const tl=$('#toggleLink'); if(tl) tl.onclick = ()=>{ state.game.linkShot = !state.game.linkShot; updateGameUI(true); };
 }
 
 // ====== 啟動 ======
