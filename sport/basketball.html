@@ -450,12 +450,15 @@
           <div class="card">
             <div class="label">基本資料</div>
             <div class="grid grid-2 mt8">
-              <label>隊伍
-                <select id="fmTeam">
-                  <option value="home">主隊</option>
-                  <option value="away">客隊</option>
-                </select>
-              </label>
+              <label>球隊名稱
+  <input id="fmTeamName" placeholder="例：湖人 / 楊梅高中" />
+</label>
+<label class="field-sm">本場歸屬
+  <select id="fmSide">
+    <option value="home">主</option>
+    <option value="away">客</option>
+  </select>
+</label>
               <label>背號
                 <input id="fmNumber" type="number" min="0" placeholder="例：7" />
               </label>
