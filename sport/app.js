@@ -1379,3 +1379,93 @@ function bindEvents(){
     };
   }
 })();
+
+/* ===== Players View：篩選 + 卡片牆 ===== */
+(function playersIndexCards(){
+  const $ = (s)=>document.querySelector(s);
+  const fmtMin = (ms)=>{ const s=Math.floor(Math.max(0,ms)/1000); const m=Math.floor(s/60); const sec=s%60; return `${m}:${String(sec).padStart(2,'0')}`; };
+  const sideLabel = (t)=> t==='home'?'主隊':'客隊';
+
+  function passFilter(p, team, pos, onlyOn){
+    if(team!=='all' && p.team!==team) return false;
+    if(pos!=='all' && (p.pos||'').toUpperCase()!==pos.toUpperCase()) return false;
+    if(onlyOn && !p.oncourt) return false;
+    return true;
+  }
+
+  function cardNode(p){
+    const over = (p.PF|0) >= (state?.rules?.limitPF|0 || 5);
+    const div = document.createElement('div'); div.className = 'player-card'+(over?' foul-max':''); div.dataset.pid=p.id;
+    div.innerHTML = `
+      <div class="player-top">
+        <img class="player-avatar" src="${p.avatar||''}" alt="">
+        <div class="flex1">
+          <div class="row space-between">
+            <div class="player-num">#${p.number||0}</div>
+            <div class="chip">${sideLabel(p.team)}</div>
+          </div>
+          <div class="player-name">${p.nameZh||p.nameEn||''}</div>
+          <div class="player-meta">上場：${fmtMin(p.playMs|0)}｜犯規：${p.PF|0}</div>
+        </div>
+      </div>
+      <hr class="divider">
+      <div class="player-stats">
+        <div class="stat"><div class="label">PTS</div><div class="value">${p.PTS|0}</div></div>
+        <div class="stat"><div class="label">REB</div><div class="value">${p.REB|0}</div></div>
+        <div class="stat"><div class="label">AST</div><div class="value">${p.AST|0}</div></div>
+      </div>
+    `;
+    // 點卡片 → 切換上場勾選（同步表格）
+    div.addEventListener('click', async ()=>{
+      const rec = await get('players', p.id); if(!rec) return;
+      rec.oncourt = !rec.oncourt;
+      await put('players', rec);
+      renderPlayers(); // 原表格
+      renderPlayersCards(); // 重新渲染卡片牆
+    });
+    return div;
+  }
+
+  async function renderPlayersCards(){
+    const wrap = $('#playersCards'); if(!wrap) return;
+    const team = $('#plFilterTeam')?.value || 'all';
+    const pos  = $('#plFilterPos')?.value  || 'all';
+    const onlyOn = $('#plOnlyOncourt')?.checked || false;
+
+    const list = (await allPlayers()).map(ensurePlayerShape)
+      .filter(p=> passFilter(p, team, pos, onlyOn))
+      .sort((a,b)=> (a.team===b.team?0:(a.team==='home'?-1:1)) || (a.number-b.number));
+
+    wrap.innerHTML='';
+    list.forEach(p=> wrap.appendChild(cardNode(p)));
+  }
+
+  // 綁定篩選器變更
+  const bind = ()=>{
+    $('#plFilterTeam')?.addEventListener('change', renderPlayersCards);
+    $('#plFilterPos')?.addEventListener('change', renderPlayersCards);
+    $('#plOnlyOncourt')?.addEventListener('change', renderPlayersCards);
+  };
+
+  // 與原表格保持同步：覆寫 renderPlayers() 之後追加一次卡片刷新
+  const _origRenderPlayers = window.renderPlayers;
+  if(typeof _origRenderPlayers === 'function'){
+    window.renderPlayers = async function(){
+      await _origRenderPlayers();
+      renderPlayersCards();
+    };
+  }
+
+  // 初次啟動（當 playersView 打開或載入時）
+  document.addEventListener('click', (e)=>{
+    const tab = e.target.closest('.tab'); if(!tab) return;
+    if(tab.dataset.view==='playersView'){ setTimeout(renderPlayersCards, 0); }
+  });
+  // 若一開始就停在 playersView
+  if(document.querySelector('#playersView.view.active')) setTimeout(renderPlayersCards, 0);
+
+  bind();
+  // 暴露給外部（讓別處手動刷新）
+  window.renderPlayersCards = renderPlayersCards;
+})();
+
