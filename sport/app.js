@@ -65,7 +65,7 @@ const fmtMin = (ms)=>{ const s=Math.floor(Math.max(0,ms)/1000); const m=Math.flo
 
 /* ========== Init / Load ========== */
 async function loadState(){
-  teamNames: { home:'', away:'' },
+  teamNames: { },
   const saved = await get('game','state');
   if(saved){ Object.assign(state,saved.v||saved); }
   if($('#gameTitle')) $('#gameTitle').value = state.gameTitle || '';
